@@ -45,30 +45,45 @@ module external_avalanche_entropy(
                                   input wire          clk,
                                   input wire          reset_n,
 
-                                  input wire          entropy,
+                                  input wire          noise,
   
                                   output wire [7 : 0] debug
                                   );
 
+  //----------------------------------------------------------------
+  // Internal constant and parameter definitions.
+  //----------------------------------------------------------------
+  // 50 MHz / 12.5 MHz
+  parameter DEBUG_RATE = 32'h00bebc20;
+  
   
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
   //----------------------------------------------------------------
-  reg entropy_sample0_reg;
-  reg entropy_sample1_reg;
+  reg noise_sample_reg;
 
-  reg entropy_flank0_reg;
-  reg entropy flang1_reg;
+  reg flank0_reg;
+  reg flang1_reg;
 
   reg [31 : 0] cycle_ctr_reg;
 
   reg [31 : 0] entropy_reg;
+  reg [31 : 0] entropy_new;
+  reg          entropy_we;
   
+  reg [31 : 0] debug_ctr_reg;
+  reg [31 : 0] debug_ctr_new;
+  reg          debug_ctr_we;
+  
+  reg [7 : 0] debug_reg;
+  reg [7 : 0] debug_new;
+  reg         debug_we;
+
   
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
-  assign debug = entropy_reg[7 : 0];
+  assign debug = debug_reg;
   
   
   //----------------------------------------------------------------
@@ -78,36 +93,76 @@ module external_avalanche_entropy(
     begin
       if (!reset_n)
         begin
-          entropy_sample0_reg <= 32'h00000000;
-          entropy_sample1_reg <= 32'h00000000;
-          entropy_flank0_reg  <= 32'h00000000;
-          entropy flang1_reg  <= 32'h00000000;
-
-          cycle_ctr_reg       <= 32'h00000000;
-          
-          entropy_reg         <= 32'h00000000;
+          noise_sample_reg <= 1'b0;
+          flank0_reg       <= 1'b0;
+          flank1_reg       <= 1'b0;
+          cycle_ctr_reg    <= 32'h00000000;
+          debug_ctr_reg    <= 32'h00000000;
+          entropy_reg      <= 32'h00000000;
+          debug_reg        <= 8'h00;
         end
       else
         begin
-          // Input register just to lock the external data.
-          entropy_sample0_reg <= entropy;
-          entropy_sample1_reg <= entropy_sample0_reg;
+          noise_sample_reg <= noise;
 
-          // Flank detect registes. Could be done with the sample regs.
-          entropy_flank0_reg <= entropy_sample1_reg;
-          entropy flang1_reg <= entropy_flank0_reg;
+          flank0_reg <= noise_sample_reg;
+          flang1_reg <= entropy_flank0_reg;
 
-          // Free running cycle counter.
           cycle_ctr_reg <= cycle_ctr_reg + 1'b1;
+          debug_ctr_reg <= debug_ctr_new;
           
-          // Shift register for entropy collection.
-          if ((!flang1_reg) and (flang0_reg))
+          if (entropy_we)
             begin
-              entropy_reg <= {entropy_reg[30 : 0], cycle_ctr_reg[0]};
+              entropy_reg <= entropy_new;
+            end
+
+          if (debug_we)
+            begin
+              debug_reg <= debug_new;
             end
         end
     end // reg_update
 
+
+  //----------------------------------------------------------------
+  // entropy_collect
+  //
+  // This is where we collect entropy by adding the LSB of the
+  // cycle counter to the entropy shift register every time
+  // we detect a positive flank at the noise source.
+  //----------------------------------------------------------------
+  always @*
+    begin : entropy_collect
+      entropy_new = 32'h00000000;
+      entropy_we  = 1'b0;
+
+      // Update the entropy shift register every positive flank.
+      if ((flank1_reg) and (flank0_reg))
+        begin
+          entropy_new = {entropy_reg[30 : 0], cycle_ctr_reg[0]};
+          entropy_we = 1'b1;
+        end
+    end // entropy_collect
+  
+
+  //----------------------------------------------------------------
+  // debug_update
+  //
+  // Sample the entropy register as debug value at the given
+  // DEBUG_RATE.
+  //----------------------------------------------------------------
+  always @*
+    begin : debug_update
+      debug_ctr_new = debug_ctr_reg + 1'b1;
+      debug_we = 1'b0;
+
+      if (debug_ctr_reg == DEBUG_RATE)
+        begin
+          debug_ctr_new = 32'h00000000;
+          debug_we = 1'b1;
+        end
+    end // debug_update
+  
 endmodule // external_avalanche_entropy
 
 //======================================================================
