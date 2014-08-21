@@ -81,6 +81,10 @@ module external_avalanche_entropy(
   parameter CORE_NAME1     = 32'h2d323536; // "ent "
   parameter CORE_VERSION   = 32'h302e3031; // "0.01"
 
+  // DEFAULT_RATE is calculated based on 50 MHz clock.
+  // 50 MHz / 2 kHz = 25000 = 0x61a8
+  parameter DEFAULT_RATE   = 32'h000061a8;
+
   
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
@@ -155,14 +159,68 @@ module external_avalanche_entropy(
     begin
       if (!reset_n)
         begin
+          entropy_sample0_reg <= 32'h00000000;
+          entropy_sample1_reg <= 32'h00000000;
+          entropy_flank0_reg  <= 32'h00000000;
+          entropy flang1_reg  <= 32'h00000000;
+          rate_ctr_reg        <= DEFAULT_RATE;
         end
       else
         begin
+          // Input register just to lock the external data.
+          entropy_sample0_reg <= entropy;
+          entropy_sample1_reg <= entropy_sample0_reg;
+
+          // Flank detect registes. Could be done with the sample regs.
+          entropy_flank0_reg <= entropy_sample1_reg;
+          entropy flang1_reg <= entropy_flank0_reg;
+
           ready_reg        <= core_ready;
           digest_valid_reg <= core_digest_valid;
 
         end
     end // reg_update
+
+
+  //----------------------------------------------------------------
+  // bit_counters
+  //
+  // Logic for the bit one and zero bit counters.
+  //----------------------------------------------------------------
+  always @*
+    begin : bit_counters
+      zeros_ctr_new = 32'h00000000;
+      zeros_ctr_we  = 1'b0;
+      ones_ctr_new  = 32'h00000000;
+      ones_ctr_we   = 1'b0;
+
+      if (zeros_ctr_rst)
+        begin
+          zeros_ctr_new = 32'h00000000;
+          zeros_ctr_we  = 1'b1;
+        end
+
+      if (ones_ctr_rst)
+        begin
+          ones_ctr_new = 32'h00000000;
+          ones_ctr_we  = 1'b1;
+        end
+
+      if ((flang1_reg) and (!flang0_reg))
+        begin
+          // Negative flank detected.
+          zeros_ctr_new  = zeros_ctr_reg + 1'b1;
+          zeros_ctr_we   = 1'b1;
+        end
+
+      if ((!flang1_reg) and (flang0_reg))
+        begin
+          // Positive flank detected.
+          ones_ctr_new  = ones_ctr_reg + 1'b1;
+          ones_ctr_we   = 1'b1;
+        end
+
+    end // bit_counters
 
 
   //----------------------------------------------------------------
