@@ -6,6 +6,9 @@
 // avalanche noise. (or any other source that ca toggle a single
 // bit input).
 //
+// Currently the design consists of a free running counter. At every
+// positive flank detected the LSB of the counter is pushed into
+// a 32bit shift register.
 //
 // Author: Joachim Strombergson
 // Copyright (c) 2013, 2014, Secworks Sweden AB
@@ -39,51 +42,13 @@
 //======================================================================
 
 module external_avalanche_entropy(
-                                  // Clock and reset.
-                                  input wire           clk,
-                                  input wire           reset_n,
-              
-                                  // Control.
-                                  input wire           cs,
-                                  input wire           we,
+                                  input wire          clk,
+                                  input wire          reset_n,
 
-                                  // Entropy input.
                                   input wire          entropy,
-                                  
-                                  // Data ports.
-                                  input wire  [7 : 0]  address,
-                                  input wire  [31 : 0] write_data,
-                                  output wire [31 : 0] read_data,
-                                  output wire          error
-                                  );
-
-  //----------------------------------------------------------------
-  // Internal constant and parameter definitions.
-  //----------------------------------------------------------------
-  parameter ADDR_NAME0       = 8'h00;
-  parameter ADDR_NAME1       = 8'h01;
-  parameter ADDR_VERSION     = 8'h02;
   
-  parameter ADDR_CTRL        = 8'h08;
-  parameter CTRL_INIT_BIT    = 0;
-  parameter CTRL_NEXT_BIT    = 1;
-
-  parameter ADDR_STATUS      = 8'h09;
-  parameter STATUS_READY_BIT = 0;
-  parameter STATUS_VALID_BIT = 1;
-                             
-  parameter ADDR_RATE      = 8'h10;
-  parameter ADDR_ENTROPY   = 8'h20;
-  parameter ADDR_ZEROS     = 8'h21;
-  parameter ADDR_ONES      = 8'h21;
-
-  parameter CORE_NAME0     = 32'h73686132; // "ava "
-  parameter CORE_NAME1     = 32'h2d323536; // "ent "
-  parameter CORE_VERSION   = 32'h302e3031; // "0.01"
-
-  // DEFAULT_RATE is calculated based on 50 MHz clock.
-  // 50 MHz / 2 kHz = 25000 = 0x61a8
-  parameter DEFAULT_RATE   = 32'h000061a8;
+                                  output wire [7 : 0] debug
+                                  );
 
   
   //----------------------------------------------------------------
@@ -95,65 +60,19 @@ module external_avalanche_entropy(
   reg entropy_flank0_reg;
   reg entropy flang1_reg;
 
-  reg [31 : 0] entropy_ctr_reg;
-  reg [31 : 0] entropy_ctr_new;
-  reg          entropy_ctr_inc;
-  reg          entropy_ctr_rst;
-  reg          entropy_ctr_we;
-  
-  reg [31 : 0] zeros_ctr_reg;
-  reg [31 : 0] zeros_ctr_new;
-  reg          zeros_ctr_inc;
-  reg          zeros_ctr_rst;
-  reg          zeros_ctr_we;
+  reg [31 : 0] cycle_ctr_reg;
 
-  reg [31 : 0] ones_ctr_reg;
-  reg [31 : 0] ones_ctr_new;
-  reg          ones_ctr_inc;
-  reg          ones_ctr_rst;
-  reg          ones_ctr_we;
-  
-  reg [31 : 0] rate_ctr_reg;
-  reg [31 : 0] rate_ctr_new;
-  reg          rate_ctr_inc;
-  reg          rate_ctr_rst;
-  reg          rate_ctr_we;
-  
-  reg [31 : 0] rate_ctr_reg;
-  reg [31 : 0] rate_ctr_new;
-  reg          rate_ctr_inc;
-  reg          rate_ctr_rst;
-  reg          rate_ctr_we;
-  
-  reg [31 : 0] rate_reg;
-  reg [31 : 0] rate_new;
-  reg          rate_we;
-
-  reg [255 : 0] digest_reg;
-
-  reg digest_valid_reg;
-
-  
-  //----------------------------------------------------------------
-  // Wires.
-  //----------------------------------------------------------------
-  reg [31 : 0]   tmp_read_data;
-  reg            tmp_error;
+  reg [31 : 0] entropy_reg;
   
   
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
-  assign read_data = tmp_read_data;
-  assign error     = tmp_error;
+  assign debug = entropy_reg[7 : 0];
   
   
   //----------------------------------------------------------------
   // reg_update
-  //
-  // Update functionality for all registers in the core.
-  // All registers are positive edge triggered with synchronous
-  // active low reset. All registers have write enable.
   //----------------------------------------------------------------
   always @ (posedge clk or negedge reset_n)
     begin
@@ -163,7 +82,10 @@ module external_avalanche_entropy(
           entropy_sample1_reg <= 32'h00000000;
           entropy_flank0_reg  <= 32'h00000000;
           entropy flang1_reg  <= 32'h00000000;
-          rate_ctr_reg        <= DEFAULT_RATE;
+
+          cycle_ctr_reg       <= 32'h00000000;
+          
+          entropy_reg         <= 32'h00000000;
         end
       else
         begin
@@ -175,119 +97,17 @@ module external_avalanche_entropy(
           entropy_flank0_reg <= entropy_sample1_reg;
           entropy flang1_reg <= entropy_flank0_reg;
 
-          ready_reg        <= core_ready;
-          digest_valid_reg <= core_digest_valid;
-
+          // Free running cycle counter.
+          cycle_ctr_reg <= cycle_ctr_reg + 1'b1;
+          
+          // Shift register for entropy collection.
+          if ((!flang1_reg) and (flang0_reg))
+            begin
+              entropy_reg <= {entropy_reg[30 : 0], cycle_ctr_reg[0]};
+            end
         end
     end // reg_update
 
-
-  //----------------------------------------------------------------
-  // bit_counters
-  //
-  // Logic for the bit one and zero bit counters.
-  //----------------------------------------------------------------
-  always @*
-    begin : bit_counters
-      zeros_ctr_new = 32'h00000000;
-      zeros_ctr_we  = 1'b0;
-      ones_ctr_new  = 32'h00000000;
-      ones_ctr_we   = 1'b0;
-
-      if (zeros_ctr_rst)
-        begin
-          zeros_ctr_new = 32'h00000000;
-          zeros_ctr_we  = 1'b1;
-        end
-
-      if (ones_ctr_rst)
-        begin
-          ones_ctr_new = 32'h00000000;
-          ones_ctr_we  = 1'b1;
-        end
-
-      if ((flang1_reg) and (!flang0_reg))
-        begin
-          // Negative flank detected.
-          zeros_ctr_new  = zeros_ctr_reg + 1'b1;
-          zeros_ctr_we   = 1'b1;
-        end
-
-      if ((!flang1_reg) and (flang0_reg))
-        begin
-          // Positive flank detected.
-          ones_ctr_new  = ones_ctr_reg + 1'b1;
-          ones_ctr_we   = 1'b1;
-        end
-
-    end // bit_counters
-
-
-  //----------------------------------------------------------------
-  // api_logic
-  //
-  // Implementation of the api logic. If cs is enabled will either 
-  // try to write to or read from the internal registers.
-  //----------------------------------------------------------------
-  always @*
-    begin : api_logic
-      tmp_read_data = 32'h00000000;
-      tmp_error     = 0;
-      
-      if (cs)
-        begin
-          if (we)
-            begin
-              case (address)
-                // Write operations.
-                ADDR_CTRL:
-                  begin
-                  end
-
-                default:
-                  begin
-                    tmp_error = 1;
-                  end
-              endcase // case (address)
-            end // if (we)
-
-          else
-            begin
-              case (address)
-                // Read operations.
-                ADDR_NAME0:
-                  begin
-                    tmp_read_data = CORE_NAME0;
-                  end
-
-                ADDR_NAME1:
-                  begin
-                    tmp_read_data = CORE_NAME1;
-                  end
-                
-                ADDR_VERSION:
-                  begin
-                    tmp_read_data = CORE_VERSION;
-                  end
-
-                ADDR_CTRL:
-                  begin
-
-                  end
-                
-                ADDR_STATUS:
-                  begin
-
-                  end
-
-                default:
-                  begin
-                    tmp_error = 1;
-                  end
-              endcase // case (address)
-            end
-        end
-    end // addr_decoder
 endmodule // external_avalanche_entropy
 
 //======================================================================
