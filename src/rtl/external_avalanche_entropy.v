@@ -65,6 +65,7 @@ module external_avalanche_entropy(
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
   //----------------------------------------------------------------
+  reg noise_sample0_reg;
   reg noise_sample_reg;
 
   reg flank0_reg;
@@ -98,17 +99,19 @@ module external_avalanche_entropy(
     begin
       if (!reset_n)
         begin
-          noise_sample_reg <= 1'b0;
-          flank0_reg       <= 1'b0;
-          flank1_reg       <= 1'b0;
-          cycle_ctr_reg    <= 32'h00000000;
-          debug_ctr_reg    <= 32'h00000000;
-          entropy_reg      <= 32'h00000000;
-          debug_reg        <= 8'h00;
+          noise_sample0_reg <= 1'b0;
+          noise_sample_reg  <= 1'b0;
+          flank0_reg        <= 1'b0;
+          flank1_reg        <= 1'b0;
+          cycle_ctr_reg     <= 32'h00000000;
+          debug_ctr_reg     <= 32'h00000000;
+          entropy_reg       <= 32'h00000000;
+          debug_reg         <= 8'h00;
         end
       else
         begin
-          noise_sample_reg <= noise;
+          noise_sample0_reg <= noise;
+          noise_sample_reg  <= noise_sample0_reg;
 
           flank0_reg <= noise_sample_reg;
           flank1_reg <= flank0_reg;
@@ -142,7 +145,7 @@ module external_avalanche_entropy(
       entropy_we  = 1'b0;
 
       // Update the entropy shift register every positive flank.
-      if ((flank0_reg) && (flank1_reg))
+      if ((flank0_reg) && (!flank1_reg))
         begin
           entropy_new = {entropy_reg[30 : 0], cycle_ctr_reg[0]};
           entropy_we  = 1'b1;
@@ -165,7 +168,7 @@ module external_avalanche_entropy(
       if (debug_ctr_reg == DEBUG_RATE)
         begin
           debug_ctr_new = 32'h00000000;
-          debug_we = 1'b1;
+          debug_we      = 1'b1;
         end
     end // debug_update
   
