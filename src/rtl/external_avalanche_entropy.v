@@ -10,6 +10,7 @@
 // positive flank detected the LSB of the counter is pushed into
 // a 32bit shift register.
 //
+//
 // Author: Joachim Strombergson
 // Copyright (c) 2013, 2014, Secworks Sweden AB
 // All rights reserved.
@@ -59,19 +60,21 @@ module external_avalanche_entropy(
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
-  parameter DEBUG_RATE = 32'h00300000;
-  
+  parameter DEBUG_RATE   = 32'h00300000;
+  parameter SECONDS_RATE = 32'h02faf080;
+
   
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
   //----------------------------------------------------------------
-  reg noise_sample0_reg;
-  reg noise_sample_reg;
+  reg          noise_sample0_reg;
+  reg          noise_sample_reg;
 
-  reg flank0_reg;
-  reg flank1_reg;
+  reg          flank0_reg;
+  reg          flank1_reg;
 
   reg [31 : 0] cycle_ctr_reg;
+  reg [31 : 0] seconds_ctr_reg;
 
   reg [31 : 0] entropy_reg;
   reg [31 : 0] entropy_new;
@@ -81,11 +84,33 @@ module external_avalanche_entropy(
   reg [31 : 0] debug_ctr_new;
   reg          debug_ctr_we;
   
-  reg [7 : 0] debug_reg;
-  reg [7 : 0] debug_new;
-  reg         debug_we;
+  reg [7 : 0]  debug_reg;
+  reg [7 : 0]  debug_new;
+  reg          debug_we;
 
+  reg [31 : 0] posflank_ctr_reg;
+  reg [31 : 0] posflank_ctr_new;
+  reg          posflank_ctr_rst;
+  reg          posflank_ctr_we;
+
+  reg [31 : 0] negflank_ctr_reg;
+  reg [31 : 0] negflank_ctr_new;
+  reg          negflank_ctr_rst;
+  reg          negflank_ctr_we;
   
+  reg [31 : 0] posflank_sample_reg;
+  reg [31 : 0] posflank_sample_new;
+  reg          posflank_sample_we;
+
+  reg [31 : 0] negflank_sample_reg;
+  reg [31 : 0] negflank_sample_new;
+  reg          negflank_sample_we;
+
+  reg [31 : 0] totflank_sample_reg;
+  reg [31 : 0] totflank_sample_new;
+  reg          totflank_sample_we;
+  
+
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
@@ -99,14 +124,19 @@ module external_avalanche_entropy(
     begin
       if (!reset_n)
         begin
-          noise_sample0_reg <= 1'b0;
-          noise_sample_reg  <= 1'b0;
-          flank0_reg        <= 1'b0;
-          flank1_reg        <= 1'b0;
-          cycle_ctr_reg     <= 32'h00000000;
-          debug_ctr_reg     <= 32'h00000000;
-          entropy_reg       <= 32'h00000000;
-          debug_reg         <= 8'h00;
+          noise_sample0_reg   <= 1'b0;
+          noise_sample_reg    <= 1'b0;
+          flank0_reg          <= 1'b0;
+          flank1_reg          <= 1'b0;
+          debug_reg           <= 8'h00;
+          entropy_reg         <= 32'h00000000;
+          cycle_ctr_reg       <= 32'h00000000;
+          debug_ctr_reg       <= 32'h00000000;
+          posflank_ctr_reg    <= 32'h00000000;
+          negflank_ctr_reg    <= 32'h00000000;
+          totflank_ctr_reg    <= 32'h00000000;
+          posflank_sample_reg <= 32'h00000000;
+          negflank_sample_reg <= 32'h00000000;
         end
       else
         begin
@@ -116,8 +146,19 @@ module external_avalanche_entropy(
           flank0_reg <= noise_sample_reg;
           flank1_reg <= flank0_reg;
 
-          cycle_ctr_reg <= cycle_ctr_reg + 1'b1;
-          debug_ctr_reg <= debug_ctr_new;
+          cycle_ctr_reg   <= cycle_ctr_reg + 1'b1;
+          seconds_ctr_reg <= cycle_ctr_reg + 1'b1;
+          debug_ctr_reg   <= debug_ctr_new;
+
+          if (posflank_ctr_we)
+            begin
+              posflank_ctr_reg <= posflank_ctr_new;
+            end
+
+          if (negflank_ctr_we)
+            begin
+              posflank_ctr_reg <= posflank_ctr_new;
+            end
           
           if (entropy_we)
             begin
@@ -127,6 +168,21 @@ module external_avalanche_entropy(
           if (debug_we)
             begin
               debug_reg <= debug_new;
+            end
+
+          if (posflank_sample_we)
+            begin
+              posflank_sample_reg <= posflank_sample_new;
+            end
+
+          if (negflank_sample_we)
+            begin
+              negflank_sample_reg <= negflank_sample_new;
+            end
+
+          if (totflank_sample_we)
+            begin
+              totflank_sample_reg <= totflank_sample_new;
             end
         end
     end // reg_update
@@ -171,6 +227,53 @@ module external_avalanche_entropy(
           debug_we      = 1'b1;
         end
     end // debug_update
+  
+
+  //----------------------------------------------------------------
+  // flank_counters
+  //
+  // The logic for the flank counters
+  //----------------------------------------------------------------
+  always @*
+    begin : flank_counters
+      posflank_ctr_new = 32'h00000000;
+      posflank_ctr_we  = 1'b0;
+      negflank_ctr_new = 32'h00000000;
+      negflank_ctr_we  = 1'b0;
+      
+    end // flank_counters
+  
+  //----------------------------------------------------------------
+  // stats_update
+  //
+  // Implements the seconds counter used to control and sample 
+  // the flank counters.
+  //----------------------------------------------------------------
+  always @*
+    begin : stats_update
+      seconds_ctr_new     = seconds_ctr_reg + 1'b1;
+      posflank_sample_new = 32'h00000000;
+      posflank_sample_we  = 1'b0;
+      negflank_sample_new = 32'h00000000;
+      negflank_sample_we  = 1'b0;
+      totflank_sample_new = 32'h00000000;
+      totflank_sample_we  = 1'b0;
+      posflank_ctr_rst    = 1'b0;
+      negflank_ctr_rst    = 1'b0;
+      
+      if (seconds_ctr_reg == SECONDS_RATE)
+        begin
+          seconds_ctr_new = 32'h00000000;
+          posflank_sample_new = posflank_ctr_reg;
+          negflank_sample_new = negflank_ctr_reg;
+          totflank_sample_new = posflank_ctr_reg + negflank_ctr_reg;
+          posflank_sample_we  = 1'b1;
+          negflank_sample_we  = 1'b1;
+          totflank_sample_we  = 1'b1;
+          posflank_ctr_rst    = 1'b1;
+          negflank_ctr_rst    = 1'b1;
+        end
+    end // stats_update
   
 endmodule // external_avalanche_entropy
 
