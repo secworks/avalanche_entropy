@@ -42,19 +42,24 @@
 //======================================================================
 
 module external_avalanche_entropy(
-                                  input wire          clk,
-                                  input wire          reset_n,
+                                  input wire           clk,
+                                  input wire           reset_n,
 
-                                  input wire          noise,
-  
-                                  output wire [7 : 0] debug
+                                  input wire           cs,
+                                  input wire           we,
+                                  input wire  [7 : 0]  address,
+                                  input wire  [31 : 0] write_data,
+                                  output wire [31 : 0] read_data,
+                                  output wire          error,
+
+                                  input wire           noise,
+                                  output wire [7 : 0]  debug
                                   );
 
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
-  // 50 MHz / 12.5 MHz
-  parameter DEBUG_RATE = 32'h00bebc20;
+  parameter DEBUG_RATE = 32'h00300000;
   
   
   //----------------------------------------------------------------
@@ -63,7 +68,7 @@ module external_avalanche_entropy(
   reg noise_sample_reg;
 
   reg flank0_reg;
-  reg flang1_reg;
+  reg flank1_reg;
 
   reg [31 : 0] cycle_ctr_reg;
 
@@ -106,7 +111,7 @@ module external_avalanche_entropy(
           noise_sample_reg <= noise;
 
           flank0_reg <= noise_sample_reg;
-          flang1_reg <= entropy_flank0_reg;
+          flank1_reg <= flank0_reg;
 
           cycle_ctr_reg <= cycle_ctr_reg + 1'b1;
           debug_ctr_reg <= debug_ctr_new;
@@ -137,10 +142,10 @@ module external_avalanche_entropy(
       entropy_we  = 1'b0;
 
       // Update the entropy shift register every positive flank.
-      if ((flank1_reg) and (flank0_reg))
+      if ((flank0_reg) && (flank1_reg))
         begin
           entropy_new = {entropy_reg[30 : 0], cycle_ctr_reg[0]};
-          entropy_we = 1'b1;
+          entropy_we  = 1'b1;
         end
     end // entropy_collect
   
@@ -154,7 +159,8 @@ module external_avalanche_entropy(
   always @*
     begin : debug_update
       debug_ctr_new = debug_ctr_reg + 1'b1;
-      debug_we = 1'b0;
+      debug_new     = entropy_reg[7 : 0];
+      debug_we      = 1'b0;
 
       if (debug_ctr_reg == DEBUG_RATE)
         begin
