@@ -80,6 +80,11 @@ module external_avalanche_entropy(
   reg [31 : 0] cycle_ctr_reg;
   reg [31 : 0] seconds_ctr_reg;
 
+  reg [5 :  0] bit_ctr_reg;
+  reg [5 :  0] bit_ctr_new;
+  reg          bit_ctr_inc;
+  reg          bit_ctr_we;
+
   reg [31 : 0] entropy_reg;
   reg [31 : 0] entropy_new;
   reg          entropy_we;
@@ -116,9 +121,17 @@ module external_avalanche_entropy(
   
 
   //----------------------------------------------------------------
+  // Wires.
+  //----------------------------------------------------------------
+  reg tmp_entropy_ready;
+
+
+  //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
-  assign debug = debug_reg;
+  assign entropy_ready = tmp_entropy_ready;
+  assign entropy_data  = entropy_reg;
+  assign debug         = debug_reg;
   
   
   //----------------------------------------------------------------
@@ -135,7 +148,9 @@ module external_avalanche_entropy(
           debug_reg           <= 8'h00;
           entropy_reg         <= 32'h00000000;
           cycle_ctr_reg       <= 32'h00000000;
+          seconds_ctr_reg     <= 32'h00000000;
           debug_ctr_reg       <= 32'h00000000;
+          bit_ctr_reg         <= 6'h00;
           posflank_ctr_reg    <= 32'h00000000;
           negflank_ctr_reg    <= 32'h00000000;
           totflank_ctr_reg    <= 32'h00000000;
@@ -153,6 +168,11 @@ module external_avalanche_entropy(
           cycle_ctr_reg   <= cycle_ctr_reg + 1'b1;
           seconds_ctr_reg <= cycle_ctr_reg + 1'b1;
           debug_ctr_reg   <= debug_ctr_new;
+
+          if (bit_ctr_we)
+            begin
+              bit_ctr_reg <= bit_ctr_new;
+            end
           
           if (entropy_we)
             begin
@@ -195,23 +215,55 @@ module external_avalanche_entropy(
   //----------------------------------------------------------------
   // entropy_collect
   //
-  // This is where we collect entropy by adding the LSB of the
-  // cycle counter to the entropy shift register every time
-  // we detect a positive flank at the noise source.
+  // We collect entropy by adding the LSB of the cycle counter to 
+  // the entropy shift register every time we detect a positive 
+  // flank in the noise source.
   //----------------------------------------------------------------
   always @*
     begin : entropy_collect
       entropy_new = 32'h00000000;
       entropy_we  = 1'b0;
+      bit_ctr_inc = 1'b0;
 
-      // Update the entropy shift register every positive flank.
       if ((flank0_reg) && (!flank1_reg))
         begin
           entropy_new = {entropy_reg[30 : 0], cycle_ctr_reg[0]};
           entropy_we  = 1'b1;
+          bit_ctr_inc = 1'b1;
         end
     end // entropy_collect
   
+
+  //----------------------------------------------------------------
+  // entropy_read_logic
+  //
+  // The logic needed to handle detection that entropy has been
+  // read and ensure that we collect more than 32 entropy
+  // bits beforeproviding more entropy.
+  //----------------------------------------------------------------
+  always @*
+    begin : entropy_read_logic
+      bit_ctr_new       = 6'h00;
+      bit_ctr_we        = 1'b0;
+      tmp_entropy_ready = 1'b0;
+
+      if (bit_ctr_reg == 6'h20)
+        begin
+          tmp_entropy_ready = 1'b1;
+        end
+
+      if ((bit_ctr_inc) && (bit_ctr_reg < 6'h20))
+        begin
+          bit_ctr_new = bit_ctr_reg + 1'b1;
+          bit_ctr_we  = 1'b1;
+        end
+      else if (entropy_read)
+        begin
+          bit_ctr_new = 6'h00;
+          bit_ctr_we  = 1'b1;
+        end
+      end // entropy_read_logic
+
 
   //----------------------------------------------------------------
   // debug_update
@@ -235,8 +287,6 @@ module external_avalanche_entropy(
 
   //----------------------------------------------------------------
   // flank_counters
-  //
-  // The logic for the flank counters
   //----------------------------------------------------------------
   always @*
     begin : flank_counters
@@ -260,10 +310,9 @@ module external_avalanche_entropy(
 
   
   //----------------------------------------------------------------
-  // stats_update
+  // stats_updates
   //
-  // Implements the seconds counter used to control and sample 
-  // the flank counters.
+  // Update the statistics counters once every second.
   //----------------------------------------------------------------
   always @*
     begin : stats_update
