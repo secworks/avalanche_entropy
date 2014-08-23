@@ -54,8 +54,12 @@ module external_avalanche_entropy(
                                   output wire          error,
 
                                   input wire           noise,
+
+                                  input wire           entropy_read,
+                                  output wire          entropy_ready,
+                                  output wire [31 : 0] entropy_data,
                                   output wire [7 : 0]  debug
-                                  );
+                                 );
 
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
