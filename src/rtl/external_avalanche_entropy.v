@@ -149,16 +149,6 @@ module external_avalanche_entropy(
           cycle_ctr_reg   <= cycle_ctr_reg + 1'b1;
           seconds_ctr_reg <= cycle_ctr_reg + 1'b1;
           debug_ctr_reg   <= debug_ctr_new;
-
-          if (posflank_ctr_we)
-            begin
-              posflank_ctr_reg <= posflank_ctr_new;
-            end
-
-          if (negflank_ctr_we)
-            begin
-              posflank_ctr_reg <= posflank_ctr_new;
-            end
           
           if (entropy_we)
             begin
@@ -168,6 +158,16 @@ module external_avalanche_entropy(
           if (debug_we)
             begin
               debug_reg <= debug_new;
+            end
+
+          if (posflank_ctr_we)
+            begin
+              posflank_ctr_reg <= posflank_ctr_new;
+            end
+
+          if (negflank_ctr_we)
+            begin
+              posflank_ctr_reg <= posflank_ctr_new;
             end
 
           if (posflank_sample_we)
@@ -240,8 +240,20 @@ module external_avalanche_entropy(
       posflank_ctr_we  = 1'b0;
       negflank_ctr_new = 32'h00000000;
       negflank_ctr_we  = 1'b0;
-      
+
+      if ((flank0_reg) && (!flank1_reg))
+        begin
+          posflank_ctr_new = posflank_ctr_reg + 1'b1;
+          posflank_ctr_we  = 1'b0;
+        end
+
+      if ((!flank0_reg) && (flank1_reg))
+        begin
+          negflank_ctr_new = negflank_ctr_reg + 1'b1;
+          negflank_ctr_we  = 1'b0;
+        end
     end // flank_counters
+
   
   //----------------------------------------------------------------
   // stats_update
