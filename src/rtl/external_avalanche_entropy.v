@@ -85,7 +85,9 @@ module external_avalanche_entropy(
   reg          flank1_reg;
 
   reg [31 : 0] cycle_ctr_reg;
+
   reg [31 : 0] seconds_ctr_reg;
+  reg [31 : 0] seconds_ctr_new;
 
   reg [5 :  0] bit_ctr_reg;
   reg [5 :  0] bit_ctr_new;
@@ -169,9 +171,9 @@ module external_avalanche_entropy(
           bit_ctr_reg         <= 6'h00;
           posflank_ctr_reg    <= 32'h00000000;
           negflank_ctr_reg    <= 32'h00000000;
-          totflank_ctr_reg    <= 32'h00000000;
           posflank_sample_reg <= 32'h00000000;
           negflank_sample_reg <= 32'h00000000;
+          totflank_sample_reg <= 32'h00000000;
         end
       else
         begin
@@ -275,7 +277,7 @@ module external_avalanche_entropy(
           bit_ctr_new = bit_ctr_reg + 1'b1;
           bit_ctr_we  = 1'b1;
         end
-      else if (entropy_read || debug_ctr_rst)
+      else if (entropy_read || bit_ctr_rst)
         begin
           bit_ctr_new = 6'h00;
           bit_ctr_we  = 1'b1;
