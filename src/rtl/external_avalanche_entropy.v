@@ -54,11 +54,14 @@ module external_avalanche_entropy(
                                   output wire          error,
 
                                   input wire           noise,
+                                  output wire          sampled_noise,
+                                  output wire          entropy,
 
                                   input wire           entropy_read,
                                   output wire          entropy_ready,
                                   output wire [31 : 0] entropy_data,
-                                  output wire [7 : 0]  debug
+                                  output wire [7 : 0]  debug,
+                                  output wire [7 : 0]  debug2
                                  );
 
 
@@ -146,6 +149,10 @@ module external_avalanche_entropy(
   assign entropy_ready = entropy_ready_reg;
   assign entropy_data  = entropy_reg;
   assign debug         = debug_reg;
+  assign debug2        = debug_reg;
+
+  assign sampled_noise = noise_sample_reg;
+  assign entropy       = entropy_reg[0];
 
   assign read_data     = tmp_read_data;
   assign error         = tmp_error;
@@ -186,7 +193,7 @@ module external_avalanche_entropy(
           entropy_ready_reg <= entropy_ready_new;
 
           cycle_ctr_reg     <= cycle_ctr_reg + 1'b1;
-          seconds_ctr_reg   <= cycle_ctr_reg + 1'b1;
+          seconds_ctr_reg   <= seconds_ctr_new;
           debug_ctr_reg     <= debug_ctr_new;
 
           if (bit_ctr_we)
@@ -211,7 +218,7 @@ module external_avalanche_entropy(
 
           if (negflank_ctr_we)
             begin
-              posflank_ctr_reg <= posflank_ctr_new;
+              negflank_ctr_reg <= negflank_ctr_new;
             end
 
           if (posflank_sample_we)
@@ -315,16 +322,28 @@ module external_avalanche_entropy(
       negflank_ctr_new = 32'h00000000;
       negflank_ctr_we  = 1'b0;
 
+      if (posflank_ctr_rst)
+        begin
+          posflank_ctr_new = 32'h00000000;
+          posflank_ctr_we  = 1'b1;
+        end
+
+      if (negflank_ctr_rst)
+        begin
+          negflank_ctr_new = 32'h00000000;
+          negflank_ctr_we  = 1'b1;
+        end
+
       if ((flank0_reg) && (!flank1_reg))
         begin
           posflank_ctr_new = posflank_ctr_reg + 1'b1;
-          posflank_ctr_we  = 1'b0;
+          posflank_ctr_we  = 1'b1;
         end
 
       if ((!flank0_reg) && (flank1_reg))
         begin
           negflank_ctr_new = negflank_ctr_reg + 1'b1;
-          negflank_ctr_we  = 1'b0;
+          negflank_ctr_we  = 1'b1;
         end
     end // flank_counters
 
@@ -348,7 +367,7 @@ module external_avalanche_entropy(
 
       if (seconds_ctr_reg == SECONDS_RATE)
         begin
-          seconds_ctr_new = 32'h00000000;
+          seconds_ctr_new     = 32'h00000000;
           posflank_sample_new = posflank_ctr_reg;
           negflank_sample_new = negflank_ctr_reg;
           totflank_sample_new = posflank_ctr_reg + negflank_ctr_reg;
