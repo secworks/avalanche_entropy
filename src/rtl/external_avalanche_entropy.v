@@ -60,8 +60,10 @@ module external_avalanche_entropy(
                                   input wire           entropy_read,
                                   output wire          entropy_ready,
                                   output wire [31 : 0] entropy_data,
-                                  output wire [7 : 0]  debug,
-                                  output wire [7 : 0]  debug2
+
+                                  output wire [7 : 0]  led,
+                                  output wire [7 : 0]  debug_data,
+                                  output wire          debug_clk
                                  );
 
 
@@ -74,7 +76,7 @@ module external_avalanche_entropy(
   parameter ADDR_NEG_FLANKS  = 8'h21;
   parameter ADDR_TOT_FLANKS  = 8'h22;
 
-  parameter DEBUG_RATE   = 32'h00300000;
+  parameter LED_RATE     = 32'h00300000;
   parameter SECONDS_RATE = 32'h02faf080;
 
 
@@ -105,13 +107,19 @@ module external_avalanche_entropy(
   reg          entropy_ready_reg;
   reg          entropy_ready_new;
 
-  reg [31 : 0] debug_ctr_reg;
-  reg [31 : 0] debug_ctr_new;
+  reg [3 : 0]  debug_ctr_reg;
+  reg [3 : 0]  debug_ctr_new;
   reg          debug_ctr_we;
 
-  reg [7 : 0]  debug_reg;
-  reg [7 : 0]  debug_new;
-  reg          debug_we;
+  reg          debug_clk_reg;
+  reg          debug_clk_new;
+
+  reg [7 : 0]  led_reg;
+  reg [7 : 0]  led_new;
+  reg          led_we;
+
+  reg [31 : 0] led_ctr_reg;
+  reg [31 : 0] led_ctr_new;
 
   reg [31 : 0] posflank_ctr_reg;
   reg [31 : 0] posflank_ctr_new;
@@ -148,14 +156,17 @@ module external_avalanche_entropy(
   //----------------------------------------------------------------
   assign entropy_ready = entropy_ready_reg;
   assign entropy_data  = entropy_reg;
-  assign debug         = debug_reg;
-  assign debug2        = debug_reg;
+
+  assign led           = led_reg;
+  assign debug_data    = entropy_reg[7 : 0];
+  assign debug_clk     = debug_clk_reg;
 
   assign sampled_noise = noise_sample_reg;
   assign entropy       = entropy_reg[0];
 
   assign read_data     = tmp_read_data;
   assign error         = tmp_error;
+
 
 
   //----------------------------------------------------------------
@@ -169,13 +180,15 @@ module external_avalanche_entropy(
           noise_sample_reg    <= 1'b0;
           flank0_reg          <= 1'b0;
           flank1_reg          <= 1'b0;
-          debug_reg           <= 8'h00;
           entropy_ready_reg   <= 1'b0;
           entropy_reg         <= 32'h00000000;
           cycle_ctr_reg       <= 32'h00000000;
           seconds_ctr_reg     <= 32'h00000000;
-          debug_ctr_reg       <= 32'h00000000;
           bit_ctr_reg         <= 6'h00;
+          led_reg             <= 8'h00;
+          led_ctr_reg         <= 32'h00000000;
+          debug_ctr_reg       <= 4'h0;
+          debug_clk_reg       <= 1'b0;
           posflank_ctr_reg    <= 32'h00000000;
           negflank_ctr_reg    <= 32'h00000000;
           posflank_sample_reg <= 32'h00000000;
@@ -194,11 +207,17 @@ module external_avalanche_entropy(
 
           cycle_ctr_reg     <= cycle_ctr_reg + 1'b1;
           seconds_ctr_reg   <= seconds_ctr_new;
-          debug_ctr_reg     <= debug_ctr_new;
+          led_ctr_reg       <= led_ctr_new;
+          debug_clk_reg     <= debug_clk_new;
 
           if (bit_ctr_we)
             begin
               bit_ctr_reg <= bit_ctr_new;
+            end
+
+          if (debug_ctr_we)
+            begin
+              debug_ctr_reg <= debug_ctr_new;
             end
 
           if (entropy_we)
@@ -206,9 +225,9 @@ module external_avalanche_entropy(
               entropy_reg <= entropy_new;
             end
 
-          if (debug_we)
+          if (led_we)
             begin
-              debug_reg <= debug_new;
+              led_reg <= entropy_reg[7 : 0];
             end
 
           if (posflank_ctr_we)
@@ -248,17 +267,45 @@ module external_avalanche_entropy(
   //----------------------------------------------------------------
   always @*
     begin : entropy_collect
-      entropy_new = 32'h00000000;
-      entropy_we  = 1'b0;
-      bit_ctr_inc = 1'b0;
+      entropy_new   = 32'h00000000;
+      entropy_we    = 1'b0;
+      bit_ctr_inc   = 1'b0;
+      debug_ctr_inc = 1'b0;
 
       if ((flank0_reg) && (!flank1_reg))
         begin
-          entropy_new = {entropy_reg[30 : 0], cycle_ctr_reg[0]};
-          entropy_we  = 1'b1;
-          bit_ctr_inc = 1'b1;
+          entropy_new   = {entropy_reg[30 : 0], cycle_ctr_reg[0]};
+          entropy_we    = 1'b1;
+          bit_ctr_inc   = 1'b1;
+          debug_ctr_inc = 1'b1;
         end
     end // entropy_collect
+
+
+  //----------------------------------------------------------------
+  // debug_ctr_logic
+  //
+  // The logic implements the counter needed to handle detection
+  // that enough bis has been generated to output debug values.
+  //----------------------------------------------------------------
+  always @*
+    begin : debug_ctr_logic
+      debug_ctr_new = 4'h0;
+      debug_ctr_we  = 0;
+      debug_clk_new = 0;
+
+      if (debug_ctr_new == 4'h08)
+        begin
+          debug_ctr_new = 4'h0;
+          debug_ctr_we  = 1;
+          debug_clk_new = 1;
+        end
+      else if (debug_ctr_inc)
+        begin
+          debug_ctr_new = debug_ctr_reg + 1;
+          debug_ctr_we  = 1;
+        end
+      end // debug_ctr_logic
 
 
   //----------------------------------------------------------------
@@ -293,23 +340,22 @@ module external_avalanche_entropy(
 
 
   //----------------------------------------------------------------
-  // debug_update
+  // led_update
   //
-  // Sample the entropy register as debug value at the given
-  // DEBUG_RATE.
+  // Sample the entropy register as LED output value at
+  // the given LED_RATE.
   //----------------------------------------------------------------
   always @*
-    begin : debug_update
-      debug_ctr_new = debug_ctr_reg + 1'b1;
-      debug_new     = entropy_reg[7 : 0];
-      debug_we      = 1'b0;
+    begin : led_update
+      led_ctr_new = led_ctr_reg + 1'b1;
+      led_we      = 1'b0;
 
-      if (debug_ctr_reg == DEBUG_RATE)
+      if (debug_ctr_reg == LED_RATE)
         begin
-          debug_ctr_new = 32'h00000000;
-          debug_we      = 1'b1;
+          led_ctr_new = 32'h00000000;
+          led_we      = 1'b1;
         end
-    end // debug_update
+    end // led_update
 
 
   //----------------------------------------------------------------
