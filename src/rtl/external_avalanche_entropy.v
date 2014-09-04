@@ -89,7 +89,7 @@ module external_avalanche_entropy(
   reg          flank0_reg;
   reg          flank1_reg;
 
-  reg [31 : 0] cycle_ctr_reg;
+  reg          entropy_bit_reg;
 
   reg [31 : 0] seconds_ctr_reg;
   reg [31 : 0] seconds_ctr_new;
@@ -183,7 +183,7 @@ module external_avalanche_entropy(
           flank1_reg          <= 1'b0;
           entropy_ready_reg   <= 1'b0;
           entropy_reg         <= 32'h00000000;
-          cycle_ctr_reg       <= 32'h00000000;
+          entropy_bit_reg     <= 1'b0;
           seconds_ctr_reg     <= 32'h00000000;
           bit_ctr_reg         <= 6'h00;
           led_reg             <= 8'h00;
@@ -206,7 +206,8 @@ module external_avalanche_entropy(
 
           entropy_ready_reg <= entropy_ready_new;
 
-          cycle_ctr_reg     <= cycle_ctr_reg + 1'b1;
+          entropy_bit_reg   <= ~entropy_bit_reg;
+
           seconds_ctr_reg   <= seconds_ctr_new;
           led_ctr_reg       <= led_ctr_new;
           debug_clk_reg     <= debug_clk_new;
@@ -262,9 +263,9 @@ module external_avalanche_entropy(
   //----------------------------------------------------------------
   // entropy_collect
   //
-  // We collect entropy by adding the LSB of the cycle counter to
-  // the entropy shift register every time we detect a positive
-  // flank in the noise source.
+  // We collect entropy by adding the current state of the
+  // entropy bit register the entropy shift register every time
+  // we detect a positive flank in the noise source.
   //----------------------------------------------------------------
   always @*
     begin : entropy_collect
@@ -275,7 +276,7 @@ module external_avalanche_entropy(
 
       if ((flank0_reg) && (!flank1_reg))
         begin
-          entropy_new   = {entropy_reg[30 : 0], cycle_ctr_reg[0]};
+          entropy_new   = {entropy_reg[30 : 0], entropy_bit_reg};
           entropy_we    = 1'b1;
           bit_ctr_inc   = 1'b1;
           debug_ctr_inc = 1'b1;
