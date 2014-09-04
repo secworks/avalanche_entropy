@@ -109,6 +109,7 @@ module external_avalanche_entropy(
 
   reg [3 : 0]  debug_ctr_reg;
   reg [3 : 0]  debug_ctr_new;
+  reg          debug_ctr_inc;
   reg          debug_ctr_we;
 
   reg          debug_clk_reg;
@@ -294,7 +295,7 @@ module external_avalanche_entropy(
       debug_ctr_we  = 0;
       debug_clk_new = 0;
 
-      if (debug_ctr_new == 4'h08)
+      if (debug_ctr_reg == 4'h08)
         begin
           debug_ctr_new = 4'h0;
           debug_ctr_we  = 1;
@@ -302,7 +303,7 @@ module external_avalanche_entropy(
         end
       else if (debug_ctr_inc)
         begin
-          debug_ctr_new = debug_ctr_reg + 1;
+          debug_ctr_new = debug_ctr_reg + 1'b1;
           debug_ctr_we  = 1;
         end
       end // debug_ctr_logic
@@ -350,7 +351,7 @@ module external_avalanche_entropy(
       led_ctr_new = led_ctr_reg + 1'b1;
       led_we      = 1'b0;
 
-      if (debug_ctr_reg == LED_RATE)
+      if (led_ctr_reg == LED_RATE)
         begin
           led_ctr_new = 32'h00000000;
           led_we      = 1'b1;
