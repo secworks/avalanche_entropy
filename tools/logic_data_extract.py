@@ -67,7 +67,7 @@ def main():
         i = 0
         for line in my_file:
             if i > 0:
-                my_byte = line.split(',')[1][0:4]
+                my_byte = line.split(',')[1][2:6]
                 if VERBOSE:
                     print(my_byte, int(my_byte, 16), chr(int(my_byte, 16)))
                 my_bytes.append(int(my_byte, 16))
