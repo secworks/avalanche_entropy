@@ -63,7 +63,10 @@ module external_avalanche_entropy(
 
                                   output wire [7 : 0]  led,
                                   output wire [7 : 0]  debug_data,
-                                  output wire          debug_clk
+                                  output wire          debug_clk,
+
+                                  output wire [14 : 0] delta_data,
+                                  output wire          delta_clk
                                  );
 
 
@@ -75,6 +78,7 @@ module external_avalanche_entropy(
   parameter ADDR_POS_FLANKS  = 8'h20;
   parameter ADDR_NEG_FLANKS  = 8'h21;
   parameter ADDR_TOT_FLANKS  = 8'h22;
+  parameter ADDR_DELTA       = 8'h23;
 
   parameter LED_RATE     = 32'h00300000;
   parameter SECONDS_RATE = 32'h02faf080;
@@ -144,6 +148,20 @@ module external_avalanche_entropy(
   reg [31 : 0] totflank_sample_new;
   reg          totflank_sample_we;
 
+  reg [31 : 0] cycle_ctr_reg;
+  reg [31 : 0] cycle_ctr_new;
+
+  reg [31 : 0] prev_cycle_ctr_reg;
+  reg [31 : 0] prev_cycle_ctr_new;
+  reg          prev_cycle_ctr_we;
+
+  reg [14 : 0] delta_reg;
+  reg [14 : 0] delta_new;
+  reg          delta_we;
+
+  reg          delta_clk_reg;
+  reg          delta_clk_new;
+
 
   //----------------------------------------------------------------
   // Wires.
@@ -168,6 +186,8 @@ module external_avalanche_entropy(
   assign read_data     = tmp_read_data;
   assign error         = tmp_error;
 
+  assign delta_data    = delta_reg;
+  assign delta_clk     = delta_clk_reg;
 
 
   //----------------------------------------------------------------
@@ -190,6 +210,10 @@ module external_avalanche_entropy(
           led_ctr_reg         <= 32'h00000000;
           debug_ctr_reg       <= 4'h0;
           debug_clk_reg       <= 1'b0;
+          cycle_ctr_reg       <= 32'h00000000;
+          prev_cycle_ctr_reg  <= 32'h00000000;
+          delta_reg           <= 15'h0000;
+          delta_clk_reg       <= 1'b0;
           posflank_ctr_reg    <= 32'h00000000;
           negflank_ctr_reg    <= 32'h00000000;
           posflank_sample_reg <= 32'h00000000;
@@ -211,6 +235,19 @@ module external_avalanche_entropy(
           seconds_ctr_reg   <= seconds_ctr_new;
           led_ctr_reg       <= led_ctr_new;
           debug_clk_reg     <= debug_clk_new;
+          delta_clk_reg     <= delta_clk_new;
+
+          cycle_ctr_reg     <= cycle_ctr_new;
+
+          if (pre_cycle_ctr_we)
+            begin
+              prev_cycle_ctr_reg <= prev_cycle_ctr_new;
+            end
+
+          if (delta_we)
+            begin
+              delta_reg <= delta_new;
+            end
 
           if (bit_ctr_we)
             begin
@@ -282,6 +319,41 @@ module external_avalanche_entropy(
           debug_ctr_inc = 1'b1;
         end
     end // entropy_collect
+
+
+  //----------------------------------------------------------------
+  // delta_logic
+  //
+  // The logic implements the delta time measuerment system.
+  //----------------------------------------------------------------
+  always @*
+    begin : delta_logic
+      cycle_ctr_new      = cycle_ctr_reg + 1'b1;
+      prev_cycle_ctr_new = 32'h00000000;
+      prev_cycle_ctr_we  = 1'b0;
+      delta_clk_new      = 1'b0;
+      delta_new          = 15'h0000;
+      delta_we           = 1'b0;
+
+      if ((flank0_reg) && (!flank1_reg))
+        begin
+          prev_cycle_ctr_new = cycle_ctr_reg;
+          prev_cycle_ctr_we  = 1'b1;
+          cycle_ctr_new      = 32'h00000000;
+          delta_clk_new      = 1'b1;
+          delta_we           = 1'b1;
+
+
+          if (prev_cycle_ctr_reg > cycle_ctr_reg)
+            begin
+              delta_new = prev_cycle_ctr_reg - cycle_ctr_reg;
+            end
+          else
+            begin
+              delta_new = cycle_ctr_reg - prev_cycle_ctr_reg;
+            end
+        end
+      end // delta_logic
 
 
   //----------------------------------------------------------------
@@ -479,6 +551,11 @@ module external_avalanche_entropy(
                 ADDR_TOT_FLANKS:
                   begin
                     tmp_read_data = totflank_sample_reg;
+                  end
+
+                ADDR_DELTA:
+                  begin
+                    tmp_read_data = delta_reg;
                   end
 
                 default:
