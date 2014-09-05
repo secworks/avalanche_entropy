@@ -46,12 +46,12 @@ module external_avalanche_entropy(
                                   input wire           clk,
                                   input wire           reset_n,
 
-                                  input wire           cs,
-                                  input wire           we,
-                                  input wire  [7 : 0]  address,
-                                  input wire  [31 : 0] write_data,
-                                  output wire [31 : 0] read_data,
-                                  output wire          error,
+//                                  input wire           cs,
+//                                  input wire           we,
+//                                  input wire  [7 : 0]  address,
+//                                  input wire  [31 : 0] write_data,
+//                                  output wire [31 : 0] read_data,
+//                                  output wire          error,
 
                                   input wire           noise,
                                   output wire          sampled_noise,
@@ -166,8 +166,8 @@ module external_avalanche_entropy(
   //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
-  reg [31 : 0]   tmp_read_data;
-  reg            tmp_error;
+//  reg [31 : 0]   tmp_read_data;
+//  reg            tmp_error;
 
 
   //----------------------------------------------------------------
@@ -183,8 +183,8 @@ module external_avalanche_entropy(
   assign sampled_noise = noise_sample_reg;
   assign entropy       = entropy_reg[0];
 
-  assign read_data     = tmp_read_data;
-  assign error         = tmp_error;
+//  assign read_data     = tmp_read_data;
+//  assign error         = tmp_error;
 
   assign delta_data    = delta_reg;
   assign delta_clk     = delta_clk_reg;
@@ -239,7 +239,7 @@ module external_avalanche_entropy(
 
           cycle_ctr_reg     <= cycle_ctr_new;
 
-          if (pre_cycle_ctr_we)
+          if (prev_cycle_ctr_we)
             begin
               prev_cycle_ctr_reg <= prev_cycle_ctr_new;
             end
@@ -503,69 +503,69 @@ module external_avalanche_entropy(
   //----------------------------------------------------------------
   // api_logic
   //----------------------------------------------------------------
-  always @*
-    begin : api_logic
-      tmp_read_data = 32'h00000000;
-      tmp_error     = 1'b0;
-      bit_ctr_rst   = 1'b1;
-
-      if (cs)
-        begin
-          if (we)
-            begin
-              case (address)
-                // Write operations.
-
-                default:
-                  begin
-                    tmp_error = 1;
-                  end
-              endcase // case (address)
-            end // if (we)
-
-          else
-            begin
-              case (address)
-                // Read operations.
-                ADDR_STATUS:
-                  begin
-                    tmp_read_data = {31'h00000000, entropy_ready_reg};
-                   end
-
-                ADDR_ENTROPY:
-                  begin
-                    tmp_read_data = entropy_reg;
-                    bit_ctr_rst   = 1'b1;
-                  end
-
-                ADDR_POS_FLANKS:
-                  begin
-                    tmp_read_data = posflank_sample_reg;
-                  end
-
-                ADDR_NEG_FLANKS:
-                  begin
-                    tmp_read_data = negflank_sample_reg;
-                  end
-
-                ADDR_TOT_FLANKS:
-                  begin
-                    tmp_read_data = totflank_sample_reg;
-                  end
-
-                ADDR_DELTA:
-                  begin
-                    tmp_read_data = delta_reg;
-                  end
-
-                default:
-                  begin
-                    tmp_error = 1;
-                  end
-              endcase // case (address)
-            end // else: !if(we)
-        end // if (cs)
-    end // api_logic
+//  always @*
+//    begin : api_logic
+//      tmp_read_data = 32'h00000000;
+//      tmp_error     = 1'b0;
+//      bit_ctr_rst   = 1'b1;
+//
+//      if (cs)
+//        begin
+//          if (we)
+//            begin
+//              case (address)
+//                // Write operations.
+//
+//                default:
+//                  begin
+//                    tmp_error = 1;
+//                  end
+//              endcase // case (address)
+//            end // if (we)
+//
+//          else
+//            begin
+//              case (address)
+//                // Read operations.
+//                ADDR_STATUS:
+//                  begin
+//                    tmp_read_data = {31'h00000000, entropy_ready_reg};
+//                   end
+//
+//                ADDR_ENTROPY:
+//                  begin
+//                    tmp_read_data = entropy_reg;
+//                    bit_ctr_rst   = 1'b1;
+//                  end
+//
+//                ADDR_POS_FLANKS:
+//                  begin
+//                    tmp_read_data = posflank_sample_reg;
+//                  end
+//
+//                ADDR_NEG_FLANKS:
+//                  begin
+//                    tmp_read_data = negflank_sample_reg;
+//                  end
+//
+//                ADDR_TOT_FLANKS:
+//                  begin
+//                    tmp_read_data = totflank_sample_reg;
+//                  end
+//
+//                ADDR_DELTA:
+//                  begin
+//                    tmp_read_data = delta_reg;
+//                  end
+//
+//                default:
+//                  begin
+//                    tmp_error = 1;
+//                  end
+//              endcase // case (address)
+//            end // else: !if(we)
+//        end // if (cs)
+//    end // api_logic
 
 endmodule // external_avalanche_entropy
 
