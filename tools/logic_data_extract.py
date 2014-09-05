@@ -51,7 +51,6 @@ import os
 # Verbose operation on/off
 VERBOSE = False
 GEN_FILE = True
-NUM_BYTES = 2
 
 
 #-------------------------------------------------------------------
