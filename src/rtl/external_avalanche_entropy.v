@@ -75,10 +75,7 @@ module external_avalanche_entropy(
   //----------------------------------------------------------------
   parameter ADDR_STATUS      = 8'h00;
   parameter ADDR_ENTROPY     = 8'h10;
-  parameter ADDR_POS_FLANKS  = 8'h20;
-  parameter ADDR_NEG_FLANKS  = 8'h21;
-  parameter ADDR_TOT_FLANKS  = 8'h22;
-  parameter ADDR_DELTA       = 8'h23;
+  parameter ADDR_DELTA       = 8'h20;
 
   parameter LED_RATE     = 32'h00300000;
   parameter SECONDS_RATE = 32'h02faf080;
@@ -126,37 +123,10 @@ module external_avalanche_entropy(
   reg [31 : 0] led_ctr_reg;
   reg [31 : 0] led_ctr_new;
 
-  reg [31 : 0] posflank_ctr_reg;
-  reg [31 : 0] posflank_ctr_new;
-  reg          posflank_ctr_rst;
-  reg          posflank_ctr_we;
-
-  reg [31 : 0] negflank_ctr_reg;
-  reg [31 : 0] negflank_ctr_new;
-  reg          negflank_ctr_rst;
-  reg          negflank_ctr_we;
-
-  reg [31 : 0] posflank_sample_reg;
-  reg [31 : 0] posflank_sample_new;
-  reg          posflank_sample_we;
-
-  reg [31 : 0] negflank_sample_reg;
-  reg [31 : 0] negflank_sample_new;
-  reg          negflank_sample_we;
-
-  reg [31 : 0] totflank_sample_reg;
-  reg [31 : 0] totflank_sample_new;
-  reg          totflank_sample_we;
-
   reg [31 : 0] cycle_ctr_reg;
   reg [31 : 0] cycle_ctr_new;
 
-  reg [31 : 0] prev_cycle_ctr_reg;
-  reg [31 : 0] prev_cycle_ctr_new;
-  reg          prev_cycle_ctr_we;
-
   reg [14 : 0] delta_reg;
-  reg [14 : 0] delta_new;
   reg          delta_we;
 
   reg          delta_clk_reg;
@@ -204,7 +174,6 @@ module external_avalanche_entropy(
           entropy_ready_reg   <= 1'b0;
           entropy_reg         <= 32'h00000000;
           entropy_bit_reg     <= 1'b0;
-          seconds_ctr_reg     <= 32'h00000000;
           bit_ctr_reg         <= 6'h00;
           led_reg             <= 8'h00;
           led_ctr_reg         <= 32'h00000000;
@@ -214,11 +183,6 @@ module external_avalanche_entropy(
           prev_cycle_ctr_reg  <= 32'h00000000;
           delta_reg           <= 15'h0000;
           delta_clk_reg       <= 1'b0;
-          posflank_ctr_reg    <= 32'h00000000;
-          negflank_ctr_reg    <= 32'h00000000;
-          posflank_sample_reg <= 32'h00000000;
-          negflank_sample_reg <= 32'h00000000;
-          totflank_sample_reg <= 32'h00000000;
         end
       else
         begin
@@ -232,21 +196,15 @@ module external_avalanche_entropy(
 
           entropy_bit_reg   <= ~entropy_bit_reg;
 
-          seconds_ctr_reg   <= seconds_ctr_new;
           led_ctr_reg       <= led_ctr_new;
           debug_clk_reg     <= debug_clk_new;
+
           delta_clk_reg     <= delta_clk_new;
-
           cycle_ctr_reg     <= cycle_ctr_new;
-
-          if (prev_cycle_ctr_we)
-            begin
-              prev_cycle_ctr_reg <= prev_cycle_ctr_new;
-            end
 
           if (delta_we)
             begin
-              delta_reg <= delta_new;
+              delta_reg <= cycle_ctr_reg[14 : 0];
             end
 
           if (bit_ctr_we)
@@ -267,31 +225,6 @@ module external_avalanche_entropy(
           if (led_we)
             begin
               led_reg <= entropy_reg[7 : 0];
-            end
-
-          if (posflank_ctr_we)
-            begin
-              posflank_ctr_reg <= posflank_ctr_new;
-            end
-
-          if (negflank_ctr_we)
-            begin
-              negflank_ctr_reg <= negflank_ctr_new;
-            end
-
-          if (posflank_sample_we)
-            begin
-              posflank_sample_reg <= posflank_sample_new;
-            end
-
-          if (negflank_sample_we)
-            begin
-              negflank_sample_reg <= negflank_sample_new;
-            end
-
-          if (totflank_sample_we)
-            begin
-              totflank_sample_reg <= totflank_sample_new;
             end
         end
     end // reg_update
@@ -329,31 +262,16 @@ module external_avalanche_entropy(
   always @*
     begin : delta_logic
       cycle_ctr_new      = cycle_ctr_reg + 1'b1;
-      prev_cycle_ctr_new = 32'h00000000;
-      prev_cycle_ctr_we  = 1'b0;
       delta_clk_new      = 1'b0;
-      delta_new          = 15'h0000;
       delta_we           = 1'b0;
 
       if ((flank0_reg) && (!flank1_reg))
         begin
-          prev_cycle_ctr_new = cycle_ctr_reg;
-          prev_cycle_ctr_we  = 1'b1;
-          cycle_ctr_new      = 32'h00000000;
-          delta_clk_new      = 1'b1;
-          delta_we           = 1'b1;
-
-
-          if (prev_cycle_ctr_reg > cycle_ctr_reg)
-            begin
-              delta_new = prev_cycle_ctr_reg - cycle_ctr_reg;
-            end
-          else
-            begin
-              delta_new = cycle_ctr_reg - prev_cycle_ctr_reg;
-            end
+          cycle_ctr_new = 32'h00000000;
+          delta_clk_new = 1'b1;
+          delta_we      = 1'b1;
         end
-      end // delta_logic
+    end // delta_logic
 
 
   //----------------------------------------------------------------
@@ -430,74 +348,6 @@ module external_avalanche_entropy(
           led_we      = 1'b1;
         end
     end // led_update
-
-
-  //----------------------------------------------------------------
-  // flank_counters
-  //----------------------------------------------------------------
-  always @*
-    begin : flank_counters
-      posflank_ctr_new = 32'h00000000;
-      posflank_ctr_we  = 1'b0;
-      negflank_ctr_new = 32'h00000000;
-      negflank_ctr_we  = 1'b0;
-
-      if (posflank_ctr_rst)
-        begin
-          posflank_ctr_new = 32'h00000000;
-          posflank_ctr_we  = 1'b1;
-        end
-
-      if (negflank_ctr_rst)
-        begin
-          negflank_ctr_new = 32'h00000000;
-          negflank_ctr_we  = 1'b1;
-        end
-
-      if ((flank0_reg) && (!flank1_reg))
-        begin
-          posflank_ctr_new = posflank_ctr_reg + 1'b1;
-          posflank_ctr_we  = 1'b1;
-        end
-
-      if ((!flank0_reg) && (flank1_reg))
-        begin
-          negflank_ctr_new = negflank_ctr_reg + 1'b1;
-          negflank_ctr_we  = 1'b1;
-        end
-    end // flank_counters
-
-
-  //----------------------------------------------------------------
-  // stats_updates
-  //
-  // Update the statistics counters once every second.
-  //----------------------------------------------------------------
-  always @*
-    begin : stats_update
-      seconds_ctr_new     = seconds_ctr_reg + 1'b1;
-      posflank_sample_new = 32'h00000000;
-      posflank_sample_we  = 1'b0;
-      negflank_sample_new = 32'h00000000;
-      negflank_sample_we  = 1'b0;
-      totflank_sample_new = 32'h00000000;
-      totflank_sample_we  = 1'b0;
-      posflank_ctr_rst    = 1'b0;
-      negflank_ctr_rst    = 1'b0;
-
-      if (seconds_ctr_reg == SECONDS_RATE)
-        begin
-          seconds_ctr_new     = 32'h00000000;
-          posflank_sample_new = posflank_ctr_reg;
-          negflank_sample_new = negflank_ctr_reg;
-          totflank_sample_new = posflank_ctr_reg + negflank_ctr_reg;
-          posflank_sample_we  = 1'b1;
-          negflank_sample_we  = 1'b1;
-          totflank_sample_we  = 1'b1;
-          posflank_ctr_rst    = 1'b1;
-          negflank_ctr_rst    = 1'b1;
-        end
-    end // stats_update
 
 
   //----------------------------------------------------------------
