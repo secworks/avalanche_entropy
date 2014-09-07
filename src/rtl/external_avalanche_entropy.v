@@ -92,21 +92,18 @@ module external_avalanche_entropy(
 
   reg          entropy_bit_reg;
 
-  reg [31 : 0] seconds_ctr_reg;
-  reg [31 : 0] seconds_ctr_new;
-
-  reg [5 :  0] bit_ctr_reg;
-  reg [5 :  0] bit_ctr_new;
-  reg          bit_ctr_inc;
-  reg          bit_ctr_rst;
-  reg          bit_ctr_we;
-
   reg [31 : 0] entropy_reg;
   reg [31 : 0] entropy_new;
   reg          entropy_we;
 
   reg          entropy_ready_reg;
   reg          entropy_ready_new;
+
+  reg [5 :  0] bit_ctr_reg;
+  reg [5 :  0] bit_ctr_new;
+  reg          bit_ctr_inc;
+  reg          bit_ctr_rst;
+  reg          bit_ctr_we;
 
   reg [3 : 0]  debug_ctr_reg;
   reg [3 : 0]  debug_ctr_new;
