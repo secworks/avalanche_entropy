@@ -46,26 +46,19 @@ module external_avalanche_entropy(
                                   input wire           clk,
                                   input wire           reset_n,
 
-//                                  input wire           cs,
-//                                  input wire           we,
-//                                  input wire  [7 : 0]  address,
-//                                  input wire  [31 : 0] write_data,
-//                                  output wire [31 : 0] read_data,
-//                                  output wire          error,
-
                                   input wire           noise,
                                   output wire          sampled_noise,
                                   output wire          entropy,
 
-                                  input wire           entropy_read,
-                                  output wire          entropy_ready,
+                                  input wire           entropy_ack,
+                                  output wire          entropy_syn,
                                   output wire [31 : 0] entropy_data,
 
                                   output wire [7 : 0]  led,
                                   output wire [7 : 0]  debug_data,
                                   output wire          debug_clk,
 
-                                  output wire [14 : 0] delta_data,
+                                  output wire [31 : 0] delta_data,
                                   output wire          delta_clk
                                  );
 
@@ -96,8 +89,8 @@ module external_avalanche_entropy(
   reg [31 : 0] entropy_new;
   reg          entropy_we;
 
-  reg          entropy_ready_reg;
-  reg          entropy_ready_new;
+  reg          entropy_syn_reg;
+  reg          entropy_syn_new;
 
   reg [5 :  0] bit_ctr_reg;
   reg [5 :  0] bit_ctr_new;
@@ -122,7 +115,7 @@ module external_avalanche_entropy(
   reg [31 : 0] cycle_ctr_reg;
   reg [31 : 0] cycle_ctr_new;
 
-  reg [14 : 0] delta_reg;
+  reg [31 : 0] delta_reg;
   reg          delta_we;
 
   reg          delta_clk_reg;
@@ -139,7 +132,7 @@ module external_avalanche_entropy(
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
-  assign entropy_ready = entropy_ready_reg;
+  assign entropy_syn = entropy_syn_reg;
   assign entropy_data  = entropy_reg;
 
   assign led           = led_reg;
@@ -167,7 +160,7 @@ module external_avalanche_entropy(
           noise_sample_reg    <= 1'b0;
           flank0_reg          <= 1'b0;
           flank1_reg          <= 1'b0;
-          entropy_ready_reg   <= 1'b0;
+          entropy_syn_reg   <= 1'b0;
           entropy_reg         <= 32'h00000000;
           entropy_bit_reg     <= 1'b0;
           bit_ctr_reg         <= 6'h00;
@@ -176,7 +169,7 @@ module external_avalanche_entropy(
           debug_ctr_reg       <= 4'h0;
           debug_clk_reg       <= 1'b0;
           cycle_ctr_reg       <= 32'h00000000;
-          delta_reg           <= 15'h0000;
+          delta_reg           <= 32'h00000000;
           delta_clk_reg       <= 1'b0;
         end
       else
@@ -187,7 +180,7 @@ module external_avalanche_entropy(
           flank0_reg        <= noise_sample_reg;
           flank1_reg        <= flank0_reg;
 
-          entropy_ready_reg <= entropy_ready_new;
+          entropy_syn_reg <= entropy_syn_new;
 
           entropy_bit_reg   <= ~entropy_bit_reg;
 
@@ -199,7 +192,7 @@ module external_avalanche_entropy(
 
           if (delta_we)
             begin
-              delta_reg <= cycle_ctr_reg[14 : 0];
+              delta_reg <= cycle_ctr_reg;
             end
 
           if (bit_ctr_we)
@@ -296,21 +289,21 @@ module external_avalanche_entropy(
 
 
   //----------------------------------------------------------------
-  // entropy_read_logic
+  // entropy_ack_logic
   //
   // The logic needed to handle detection that entropy has been
   // read and ensure that we collect more than 32 entropy
   // bits beforeproviding more entropy.
   //----------------------------------------------------------------
   always @*
-    begin : entropy_read_logic
+    begin : entropy_ack_logic
       bit_ctr_new       = 6'h00;
       bit_ctr_we        = 1'b0;
-      entropy_ready_new = 1'b0;
+      entropy_syn_new = 1'b0;
 
       if (bit_ctr_reg == 6'h20)
         begin
-          entropy_ready_new = 1'b1;
+          entropy_syn_new = 1'b1;
         end
 
       if ((bit_ctr_inc) && (bit_ctr_reg < 6'h20))
@@ -318,12 +311,12 @@ module external_avalanche_entropy(
           bit_ctr_new = bit_ctr_reg + 1'b1;
           bit_ctr_we  = 1'b1;
         end
-      else if (entropy_read)
+      else if (entropy_ack)
         begin
           bit_ctr_new = 6'h00;
           bit_ctr_we  = 1'b1;
         end
-      end // entropy_read_logic
+      end // entropy_ack_logic
 
 
   //----------------------------------------------------------------
@@ -374,7 +367,7 @@ module external_avalanche_entropy(
 //                // Read operations.
 //                ADDR_STATUS:
 //                  begin
-//                    tmp_read_data = {31'h00000000, entropy_ready_reg};
+//                    tmp_read_data = {31'h00000000, entropy_syn_reg};
 //                   end
 //
 //                ADDR_ENTROPY:
