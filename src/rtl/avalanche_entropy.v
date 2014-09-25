@@ -1,10 +1,10 @@
 //======================================================================
 //
-// avalanche_entropy_core.v
-// ------------------------
-// Entropy provider core for an external entropy source based on
-// avalanche noise. (or any other source that ca toggle a single
-// bit input).
+// avalanche_entropy.v
+// -------------------
+// Top level wrapper of the entropy provider core based on an external
+// avalanche noise based source. (or any other source that can
+// toggle a single bit input).
 //
 // Currently the design consists of a free running counter. At every
 // positive flank detected the LSB of the counter is pushed into
@@ -42,25 +42,30 @@
 //
 //======================================================================
 
-module avalanche_entropy_core(
-                              input wire           clk,
-                              input wire           reset_n,
+module avalanche_entropy(
+                         input wire           clk,
+                         input wire           reset_n,
 
-                              input wire           noise,
-                              output wire          sampled_noise,
-                              output wire          entropy,
+                         inpit wire           noise,
 
-                              input wire           entropy_ack,
-                              output wire          entropy_syn,
-                              output wire [31 : 0] entropy_data,
+                         input wire           cs,
+                         input wire           we,
+                         input wire  [7 : 0]  address,
+                         input wire  [31 : 0] write_data,
+                         output wire [31 : 0] read_data,
+                         output wire          error,
 
-                              output wire [7 : 0]  led,
-                              output wire [7 : 0]  debug_data,
-                              output wire          debug_clk,
+                         input wire           test_mode,
+                         output wire          security_error,
 
-                              output wire [31 : 0] delta_data,
-                              output wire          delta_clk
-                             );
+                         output wire          entropy_enabled,
+                         output wire [31 : 0] entropy_data,
+                         output wire          entropy_valid,
+                         input wire           entropy_ack,
+
+                         output wire [7 : 0]  debug,
+                         input wire           debug_update
+                        );
 
 
   //----------------------------------------------------------------
@@ -405,8 +410,8 @@ module avalanche_entropy_core(
 //        end // if (cs)
 //    end // api_logic
 
-endmodule // avalanche_entropy_core
+endmodule // avalanche_entropy
 
 //======================================================================
-// EOF avalanche_entropy_core.v
+// EOF avalanche_entropy.v
 //======================================================================
