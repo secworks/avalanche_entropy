@@ -1,8 +1,8 @@
 //======================================================================
 //
-// external_avalanche_entropy.v
-// ----------------------------
-// Entropy provider for an external entropy source based on
+// avalanche_entropy_core.v
+// ------------------------
+// Entropy provider core for an external entropy source based on
 // avalanche noise. (or any other source that ca toggle a single
 // bit input).
 //
@@ -42,25 +42,25 @@
 //
 //======================================================================
 
-module external_avalanche_entropy(
-                                  input wire           clk,
-                                  input wire           reset_n,
+module avalanche_entropy_core(
+                              input wire           clk,
+                              input wire           reset_n,
 
-                                  input wire           noise,
-                                  output wire          sampled_noise,
-                                  output wire          entropy,
+                              input wire           noise,
+                              output wire          sampled_noise,
+                              output wire          entropy,
 
-                                  input wire           entropy_ack,
-                                  output wire          entropy_syn,
-                                  output wire [31 : 0] entropy_data,
+                              input wire           entropy_ack,
+                              output wire          entropy_syn,
+                              output wire [31 : 0] entropy_data,
 
-                                  output wire [7 : 0]  led,
-                                  output wire [7 : 0]  debug_data,
-                                  output wire          debug_clk,
+                              output wire [7 : 0]  led,
+                              output wire [7 : 0]  debug_data,
+                              output wire          debug_clk,
 
-                                  output wire [31 : 0] delta_data,
-                                  output wire          delta_clk
-                                 );
+                              output wire [31 : 0] delta_data,
+                              output wire          delta_clk
+                             );
 
 
   //----------------------------------------------------------------
@@ -405,8 +405,8 @@ module external_avalanche_entropy(
 //        end // if (cs)
 //    end // api_logic
 
-endmodule // external_avalanche_entropy
+endmodule // avalanche_entropy_core
 
 //======================================================================
-// EOF external_avalanche_entropy.v
+// EOF avalanche_entropy_core.v
 //======================================================================

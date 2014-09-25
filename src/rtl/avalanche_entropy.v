@@ -71,12 +71,15 @@ module avalanche_entropy(
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
-  parameter ADDR_STATUS      = 8'h00;
-  parameter ADDR_ENTROPY     = 8'h10;
-  parameter ADDR_DELTA       = 8'h20;
+  parameter ADDR_CTRL        = 8'h10;
+  parameter CTRLE_ENABLE_BIT = 0;
 
-  parameter LED_RATE     = 32'h00300000;
-  parameter SECONDS_RATE = 32'h02faf080;
+  parameter ADDR_STATUS      = 8'h11;
+  parameter ADDR_ENTROPY     = 8'h20;
+  parameter ADDR_DELTA       = 8'h30;
+
+  parameter LED_RATE         = 32'h00300000;
+  parameter SECONDS_RATE     = 32'h02faf080;
 
 
   //----------------------------------------------------------------
@@ -126,32 +129,29 @@ module avalanche_entropy(
   reg          delta_clk_reg;
   reg          delta_clk_new;
 
+  reg          enable_reg;
+  reg          enable_new;
+  reg          enable_we;
+
 
   //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
-//  reg [31 : 0]   tmp_read_data;
-//  reg            tmp_error;
+  reg [31 : 0]   tmp_read_data;
+  reg            tmp_error;
 
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
-  assign entropy_syn = entropy_syn_reg;
-  assign entropy_data  = entropy_reg;
+  assign entropy_syn     = entropy_syn_reg;
+  assign entropy_data    = entropy_reg;
+  assign entropy_enabled = enable_reg;
 
-  assign led           = led_reg;
-  assign debug_data    = entropy_reg[7 : 0];
-  assign debug_clk     = debug_clk_reg;
+  assign debug           = entropy_reg[7 : 0];
 
-  assign sampled_noise = noise_sample_reg;
-  assign entropy       = entropy_reg[0];
-
-//  assign read_data     = tmp_read_data;
-//  assign error         = tmp_error;
-
-  assign delta_data    = delta_reg;
-  assign delta_clk     = delta_clk_reg;
+  assign read_data       = tmp_read_data;
+  assign error           = tmp_error;
 
 
   //----------------------------------------------------------------
@@ -176,6 +176,7 @@ module avalanche_entropy(
           cycle_ctr_reg       <= 32'h00000000;
           delta_reg           <= 32'h00000000;
           delta_clk_reg       <= 1'b0;
+          enable_reg          <= 1;
         end
       else
         begin
@@ -346,69 +347,80 @@ module avalanche_entropy(
   //----------------------------------------------------------------
   // api_logic
   //----------------------------------------------------------------
-//  always @*
-//    begin : api_logic
-//      tmp_read_data = 32'h00000000;
-//      tmp_error     = 1'b0;
-//      bit_ctr_rst   = 1'b1;
-//
-//      if (cs)
-//        begin
-//          if (we)
-//            begin
-//              case (address)
-//                // Write operations.
-//
-//                default:
-//                  begin
-//                    tmp_error = 1;
-//                  end
-//              endcase // case (address)
-//            end // if (we)
-//
-//          else
-//            begin
-//              case (address)
-//                // Read operations.
-//                ADDR_STATUS:
-//                  begin
-//                    tmp_read_data = {31'h00000000, entropy_syn_reg};
-//                   end
-//
-//                ADDR_ENTROPY:
-//                  begin
-//                    tmp_read_data = entropy_reg;
-//                    bit_ctr_rst   = 1'b1;
-//                  end
-//
-//                ADDR_POS_FLANKS:
-//                  begin
-//                    tmp_read_data = posflank_sample_reg;
-//                  end
-//
-//                ADDR_NEG_FLANKS:
-//                  begin
-//                    tmp_read_data = negflank_sample_reg;
-//                  end
-//
-//                ADDR_TOT_FLANKS:
-//                  begin
-//                    tmp_read_data = totflank_sample_reg;
-//                  end
-//
-//                ADDR_DELTA:
-//                  begin
-//                    tmp_read_data = delta_reg;
-//                  end
-//
-//                default:
-//                  begin
-//                    tmp_error = 1;
-//                  end
-//              endcase // case (address)
-//            end // else: !if(we)
-//        end // if (cs)
-//    end // api_logic
+  always @*
+    begin : api_logic
+      tmp_read_data = 32'h00000000;
+      tmp_error     = 1'b0;
+      bit_ctr_rst   = 1'b1;
+      enable_new    = 0;
+      enable_we     = 0;
+
+      if (cs)
+        begin
+          if (we)
+            begin
+              case (address)
+                // Write operations.
+                ADDR_CTRL:
+                  begin
+                    enable_new = write_data[];
+                    enable_we  = 1;
+                  end
+
+                default:
+                  begin
+                    tmp_error = 1;
+                  end
+              endcase // case (address)
+            end // if (we)
+
+          else
+            begin
+              case (address)
+                ADDR_CTRL:
+                  begin
+                    tmp_read_data = {31'h00000000, enable_reg};
+                  end
+
+                ADDR_STATUS:
+                  begin
+                    tmp_read_data = {31'h00000000, entropy_syn_reg};
+                   end
+
+                ADDR_ENTROPY:
+                  begin
+                    tmp_read_data = entropy_reg;
+                    bit_ctr_rst   = 1'b1;
+                  end
+
+                ADDR_POS_FLANKS:
+                  begin
+                    tmp_read_data = posflank_sample_reg;
+                  end
+
+                ADDR_NEG_FLANKS:
+                  begin
+                    tmp_read_data = negflank_sample_reg;
+                  end
+
+                ADDR_TOT_FLANKS:
+                  begin
+                    tmp_read_data = totflank_sample_reg;
+                  end
+
+                ADDR_DELTA:
+                  begin
+                    tmp_read_data = delta_reg;
+                  end
+
+                default:
+                  begin
+                    tmp_error = 1;
+                  end
+              endcase // case (address)
+            end // else: !if(we)
+        end // if (cs)
+    end // api_logic
 
 endmodule // avalanche_entropy
 
