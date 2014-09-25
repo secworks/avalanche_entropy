@@ -46,7 +46,7 @@ module avalanche_entropy(
                          input wire           clk,
                          input wire           reset_n,
 
-                         inpit wire           noise,
+                         input wire           noise,
 
                          input wire           cs,
                          input wire           we,
@@ -71,15 +71,15 @@ module avalanche_entropy(
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
-  parameter ADDR_CTRL        = 8'h10;
-  parameter CTRLE_ENABLE_BIT = 0;
+  parameter ADDR_CTRL       = 8'h10;
+  parameter CTRL_ENABLE_BIT = 0;
 
-  parameter ADDR_STATUS      = 8'h11;
-  parameter ADDR_ENTROPY     = 8'h20;
-  parameter ADDR_DELTA       = 8'h30;
+  parameter ADDR_STATUS     = 8'h11;
+  parameter ADDR_ENTROPY    = 8'h20;
+  parameter ADDR_DELTA      = 8'h30;
 
-  parameter LED_RATE         = 32'h00300000;
-  parameter SECONDS_RATE     = 32'h02faf080;
+  parameter LED_RATE        = 32'h00300000;
+  parameter SECONDS_RATE    = 32'h02faf080;
 
 
   //----------------------------------------------------------------
@@ -272,7 +272,7 @@ module avalanche_entropy(
   // debug_ctr_logic
   //
   // The logic implements the counter needed to handle detection
-  // that enough bis has been generated to output debug values.
+  // that enough bits has been generated to output debug values.
   //----------------------------------------------------------------
   always @*
     begin : debug_ctr_logic
@@ -280,7 +280,7 @@ module avalanche_entropy(
       debug_ctr_we  = 0;
       debug_clk_new = 0;
 
-      if (debug_ctr_reg == 4'h08)
+      if (debug_ctr_reg == 4'h8)
         begin
           debug_ctr_new = 4'h0;
           debug_ctr_we  = 1;
@@ -351,7 +351,6 @@ module avalanche_entropy(
     begin : api_logic
       tmp_read_data = 32'h00000000;
       tmp_error     = 1'b0;
-      bit_ctr_rst   = 1'b1;
       enable_new    = 0;
       enable_we     = 0;
 
@@ -363,7 +362,7 @@ module avalanche_entropy(
                 // Write operations.
                 ADDR_CTRL:
                   begin
-                    enable_new = write_data[];
+                    enable_new = write_data[CTRL_ENABLE_BIT];
                     enable_we  = 1;
                   end
 
@@ -390,22 +389,6 @@ module avalanche_entropy(
                 ADDR_ENTROPY:
                   begin
                     tmp_read_data = entropy_reg;
-                    bit_ctr_rst   = 1'b1;
-                  end
-
-                ADDR_POS_FLANKS:
-                  begin
-                    tmp_read_data = posflank_sample_reg;
-                  end
-
-                ADDR_NEG_FLANKS:
-                  begin
-                    tmp_read_data = negflank_sample_reg;
-                  end
-
-                ADDR_TOT_FLANKS:
-                  begin
-                    tmp_read_data = totflank_sample_reg;
                   end
 
                 ADDR_DELTA:

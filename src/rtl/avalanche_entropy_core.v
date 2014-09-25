@@ -274,7 +274,7 @@ module avalanche_entropy_core(
       debug_ctr_we  = 0;
       debug_clk_new = 0;
 
-      if (debug_ctr_reg == 4'h08)
+      if (debug_ctr_reg == 4'h8)
         begin
           debug_ctr_new = 4'h0;
           debug_ctr_we  = 1;
@@ -336,74 +336,6 @@ module avalanche_entropy_core(
           led_we      = 1'b1;
         end
     end // led_update
-
-
-  //----------------------------------------------------------------
-  // api_logic
-  //----------------------------------------------------------------
-//  always @*
-//    begin : api_logic
-//      tmp_read_data = 32'h00000000;
-//      tmp_error     = 1'b0;
-//      bit_ctr_rst   = 1'b1;
-//
-//      if (cs)
-//        begin
-//          if (we)
-//            begin
-//              case (address)
-//                // Write operations.
-//
-//                default:
-//                  begin
-//                    tmp_error = 1;
-//                  end
-//              endcase // case (address)
-//            end // if (we)
-//
-//          else
-//            begin
-//              case (address)
-//                // Read operations.
-//                ADDR_STATUS:
-//                  begin
-//                    tmp_read_data = {31'h00000000, entropy_syn_reg};
-//                   end
-//
-//                ADDR_ENTROPY:
-//                  begin
-//                    tmp_read_data = entropy_reg;
-//                    bit_ctr_rst   = 1'b1;
-//                  end
-//
-//                ADDR_POS_FLANKS:
-//                  begin
-//                    tmp_read_data = posflank_sample_reg;
-//                  end
-//
-//                ADDR_NEG_FLANKS:
-//                  begin
-//                    tmp_read_data = negflank_sample_reg;
-//                  end
-//
-//                ADDR_TOT_FLANKS:
-//                  begin
-//                    tmp_read_data = totflank_sample_reg;
-//                  end
-//
-//                ADDR_DELTA:
-//                  begin
-//                    tmp_read_data = delta_reg;
-//                  end
-//
-//                default:
-//                  begin
-//                    tmp_error = 1;
-//                  end
-//              endcase // case (address)
-//            end // else: !if(we)
-//        end // if (cs)
-//    end // api_logic
 
 endmodule // avalanche_entropy_core
 
