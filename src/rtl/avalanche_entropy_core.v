@@ -70,8 +70,7 @@ module avalanche_entropy_core(
   parameter ADDR_ENTROPY     = 8'h10;
   parameter ADDR_DELTA       = 8'h20;
 
-  parameter LED_RATE     = 32'h00300000;
-  parameter SECONDS_RATE = 32'h02faf080;
+  parameter DEBUG_DELAY  = 32'h002c4b40;
 
 
   //----------------------------------------------------------------
@@ -97,21 +96,6 @@ module avalanche_entropy_core(
   reg          bit_ctr_inc;
   reg          bit_ctr_we;
 
-  reg [3 : 0]  debug_ctr_reg;
-  reg [3 : 0]  debug_ctr_new;
-  reg          debug_ctr_inc;
-  reg          debug_ctr_we;
-
-  reg          debug_clk_reg;
-  reg          debug_clk_new;
-
-  reg [7 : 0]  led_reg;
-  reg [7 : 0]  led_new;
-  reg          led_we;
-
-  reg [31 : 0] led_ctr_reg;
-  reg [31 : 0] led_ctr_new;
-
   reg [31 : 0] cycle_ctr_reg;
   reg [31 : 0] cycle_ctr_new;
 
@@ -121,12 +105,19 @@ module avalanche_entropy_core(
   reg          delta_clk_reg;
   reg          delta_clk_new;
 
+  reg [31 : 0] debug_delay_ctr_reg;
+  reg [31 : 0] debug_delay_ctr_new;
+  reg          debug_delay_ctr_we;
+
+  reg [7 : 0]  debug_reg;
+  reg          debug_we;
+
+  reg          debug_update_reg;
+
 
   //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
-//  reg [31 : 0]   tmp_read_data;
-//  reg            tmp_error;
 
 
   //----------------------------------------------------------------
@@ -135,18 +126,13 @@ module avalanche_entropy_core(
   assign entropy_syn = entropy_syn_reg;
   assign entropy_data  = entropy_reg;
 
-  assign led           = led_reg;
-  assign debug_data    = entropy_reg[7 : 0];
-  assign debug_clk     = debug_clk_reg;
-
   assign sampled_noise = noise_sample_reg;
   assign entropy       = entropy_reg[0];
 
-//  assign read_data     = tmp_read_data;
-//  assign error         = tmp_error;
-
   assign delta_data    = delta_reg;
   assign delta_clk     = delta_clk_reg;
+
+  assign debug         = debug_reg;
 
 
   //----------------------------------------------------------------
@@ -164,13 +150,14 @@ module avalanche_entropy_core(
           entropy_reg         <= 32'h00000000;
           entropy_bit_reg     <= 1'b0;
           bit_ctr_reg         <= 6'h00;
-          led_reg             <= 8'h00;
-          led_ctr_reg         <= 32'h00000000;
           debug_ctr_reg       <= 4'h0;
           debug_clk_reg       <= 1'b0;
           cycle_ctr_reg       <= 32'h00000000;
           delta_reg           <= 32'h00000000;
           delta_clk_reg       <= 1'b0;
+          debug_delay_ctr_reg <= 32'h00000000;
+          debug_reg           <= 8'h00;
+          debug_update_reg    <= 0;
         end
       else
         begin
@@ -180,15 +167,14 @@ module avalanche_entropy_core(
           flank0_reg        <= noise_sample_reg;
           flank1_reg        <= flank0_reg;
 
-          entropy_syn_reg <= entropy_syn_new;
+          entropy_syn_reg   <= entropy_syn_new;
 
           entropy_bit_reg   <= ~entropy_bit_reg;
 
-          led_ctr_reg       <= led_ctr_new;
-          debug_clk_reg     <= debug_clk_new;
-
           delta_clk_reg     <= delta_clk_new;
           cycle_ctr_reg     <= cycle_ctr_new;
+
+          debug_update_reg  <= debug_update;
 
           if (delta_we)
             begin
@@ -210,12 +196,43 @@ module avalanche_entropy_core(
               entropy_reg <= entropy_new;
             end
 
-          if (led_we)
+          if (debug_delay_ctr_we)
             begin
-              led_reg <= entropy_reg[7 : 0];
+              debug_delay_ctr_reg <= debug_delay_ctr_new;
+            end
+
+          if (debug_we)
+            begin
+              debug_reg <= ent_shift_reg[7 : 0];
             end
         end
     end // reg_update
+
+
+  //----------------------------------------------------------------
+  // debug_out
+  //
+  // Logic that updates the debug port.
+  //----------------------------------------------------------------
+  always @*
+    begin : debug_out
+      debug_delay_ctr_new = 32'h00000000;
+      debug_delay_ctr_we  = 0;
+      debug_we            = 0;
+
+      if (debug_update_reg)
+        begin
+          debug_delay_ctr_new = debug_delay_ctr_reg + 1'b1;
+          debug_delay_ctr_we  = 1;
+        end
+
+      if (debug_delay_ctr_reg == DEBUG_DELAY)
+        begin
+          debug_delay_ctr_new = 32'h00000000;
+          debug_delay_ctr_we  = 1;
+          debug_we            = 1;
+        end
+    end
 
 
   //----------------------------------------------------------------
@@ -317,25 +334,6 @@ module avalanche_entropy_core(
           bit_ctr_we  = 1'b1;
         end
       end // entropy_ack_logic
-
-
-  //----------------------------------------------------------------
-  // led_update
-  //
-  // Sample the entropy register as LED output value at
-  // the given LED_RATE.
-  //----------------------------------------------------------------
-  always @*
-    begin : led_update
-      led_ctr_new = led_ctr_reg + 1'b1;
-      led_we      = 1'b0;
-
-      if (led_ctr_reg == LED_RATE)
-        begin
-          led_ctr_new = 32'h00000000;
-          led_we      = 1'b1;
-        end
-    end // led_update
 
 endmodule // avalanche_entropy_core
 

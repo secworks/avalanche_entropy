@@ -79,8 +79,7 @@ module avalanche_entropy(
   parameter ADDR_ENTROPY    = 8'h20;
   parameter ADDR_DELTA      = 8'h30;
 
-  parameter LED_RATE        = 32'h00300000;
-  parameter SECONDS_RATE    = 32'h02faf080;
+  parameter DEBUG_DELAY     = 32'h002c4b40;
 
 
   //----------------------------------------------------------------
@@ -112,12 +111,18 @@ module avalanche_entropy(
   reg [31 : 0] delta_reg;
   reg          delta_we;
 
-  reg          delta_clk_reg;
-  reg          delta_clk_new;
-
   reg          enable_reg;
   reg          enable_new;
   reg          enable_we;
+
+  reg [31 : 0] debug_delay_ctr_reg;
+  reg [31 : 0] debug_delay_ctr_new;
+  reg          debug_delay_ctr_we;
+
+  reg [7 : 0]  debug_reg;
+  reg          debug_we;
+
+  reg          debug_update_reg;
 
 
   //----------------------------------------------------------------
@@ -130,14 +135,15 @@ module avalanche_entropy(
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
+  assign read_data       = tmp_read_data;
+  assign error           = tmp_error;
+  assign security_error  = 0;
+
   assign entropy_valid   = entropy_syn_reg;
   assign entropy_data    = entropy_reg;
   assign entropy_enabled = enable_reg;
 
-  assign debug           = entropy_reg[7 : 0];
-
-  assign read_data       = tmp_read_data;
-  assign error           = tmp_error;
+  assign debug           = debug_reg;
 
 
   //----------------------------------------------------------------
@@ -157,8 +163,10 @@ module avalanche_entropy(
           bit_ctr_reg         <= 6'h00;
           cycle_ctr_reg       <= 32'h00000000;
           delta_reg           <= 32'h00000000;
-          delta_clk_reg       <= 1'b0;
           enable_reg          <= 1;
+          debug_delay_ctr_reg <= 32'h00000000;
+          debug_reg           <= 8'h00;
+          debug_update_reg    <= 0;
         end
       else
         begin
@@ -170,9 +178,15 @@ module avalanche_entropy(
 
           entropy_syn_reg   <= entropy_syn_new;
           entropy_bit_reg   <= ~entropy_bit_reg;
-          delta_clk_reg     <= delta_clk_new;
           cycle_ctr_reg     <= cycle_ctr_new;
 
+          debug_update_reg <= debug_update;
+
+          if (enable_we)
+            begin
+              enable_reg <= enable_new;
+            end
+          
           if (delta_we)
             begin
               delta_reg <= cycle_ctr_reg;
@@ -189,6 +203,32 @@ module avalanche_entropy(
             end
         end
     end // reg_update
+
+
+  //----------------------------------------------------------------
+  // debug_out
+  //
+  // Logic that updates the debug port.
+  //----------------------------------------------------------------
+  always @*
+    begin : debug_out
+      debug_delay_ctr_new = 8'h00000000;
+      debug_delay_ctr_we  = 0;
+      debug_we            = 0;
+
+      if (debug_update_reg)
+        begin
+          debug_delay_ctr_new = debug_delay_ctr_reg + 1'b1;
+          debug_delay_ctr_we  = 1;
+        end
+
+      if (debug_delay_ctr_reg == DEBUG_DELAY)
+        begin
+          debug_delay_ctr_new = 8'h00000000;
+          debug_delay_ctr_we  = 1;
+          debug_we            = 1;
+        end
+    end
 
 
   //----------------------------------------------------------------
@@ -221,13 +261,11 @@ module avalanche_entropy(
   always @*
     begin : delta_logic
       cycle_ctr_new      = cycle_ctr_reg + 1'b1;
-      delta_clk_new      = 1'b0;
       delta_we           = 1'b0;
 
       if ((flank0_reg) && (!flank1_reg))
         begin
           cycle_ctr_new = 32'h00000000;
-          delta_clk_new = 1'b1;
           delta_we      = 1'b1;
         end
     end // delta_logic
