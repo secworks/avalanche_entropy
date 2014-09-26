@@ -106,21 +106,6 @@ module avalanche_entropy(
   reg          bit_ctr_inc;
   reg          bit_ctr_we;
 
-  reg [3 : 0]  debug_ctr_reg;
-  reg [3 : 0]  debug_ctr_new;
-  reg          debug_ctr_inc;
-  reg          debug_ctr_we;
-
-  reg          debug_clk_reg;
-  reg          debug_clk_new;
-
-  reg [7 : 0]  led_reg;
-  reg [7 : 0]  led_new;
-  reg          led_we;
-
-  reg [31 : 0] led_ctr_reg;
-  reg [31 : 0] led_ctr_new;
-
   reg [31 : 0] cycle_ctr_reg;
   reg [31 : 0] cycle_ctr_new;
 
@@ -170,10 +155,6 @@ module avalanche_entropy(
           entropy_reg         <= 32'h00000000;
           entropy_bit_reg     <= 1'b0;
           bit_ctr_reg         <= 6'h00;
-          led_reg             <= 8'h00;
-          led_ctr_reg         <= 32'h00000000;
-          debug_ctr_reg       <= 4'h0;
-          debug_clk_reg       <= 1'b0;
           cycle_ctr_reg       <= 32'h00000000;
           delta_reg           <= 32'h00000000;
           delta_clk_reg       <= 1'b0;
@@ -188,12 +169,7 @@ module avalanche_entropy(
           flank1_reg        <= flank0_reg;
 
           entropy_syn_reg   <= entropy_syn_new;
-
           entropy_bit_reg   <= ~entropy_bit_reg;
-
-          led_ctr_reg       <= led_ctr_new;
-          debug_clk_reg     <= debug_clk_new;
-
           delta_clk_reg     <= delta_clk_new;
           cycle_ctr_reg     <= cycle_ctr_new;
 
@@ -207,19 +183,9 @@ module avalanche_entropy(
               bit_ctr_reg <= bit_ctr_new;
             end
 
-          if (debug_ctr_we)
-            begin
-              debug_ctr_reg <= debug_ctr_new;
-            end
-
           if (entropy_we)
             begin
               entropy_reg <= entropy_new;
-            end
-
-          if (led_we)
-            begin
-              led_reg <= entropy_reg[7 : 0];
             end
         end
     end // reg_update
@@ -237,14 +203,12 @@ module avalanche_entropy(
       entropy_new   = 32'h00000000;
       entropy_we    = 1'b0;
       bit_ctr_inc   = 1'b0;
-      debug_ctr_inc = 1'b0;
 
       if ((flank0_reg) && (!flank1_reg))
         begin
           entropy_new   = {entropy_reg[30 : 0], entropy_bit_reg};
           entropy_we    = 1'b1;
           bit_ctr_inc   = 1'b1;
-          debug_ctr_inc = 1'b1;
         end
     end // entropy_collect
 
@@ -267,32 +231,6 @@ module avalanche_entropy(
           delta_we      = 1'b1;
         end
     end // delta_logic
-
-
-  //----------------------------------------------------------------
-  // debug_ctr_logic
-  //
-  // The logic implements the counter needed to handle detection
-  // that enough bits has been generated to output debug values.
-  //----------------------------------------------------------------
-  always @*
-    begin : debug_ctr_logic
-      debug_ctr_new = 4'h0;
-      debug_ctr_we  = 0;
-      debug_clk_new = 0;
-
-      if (debug_ctr_reg == 4'h8)
-        begin
-          debug_ctr_new = 4'h0;
-          debug_ctr_we  = 1;
-          debug_clk_new = 1;
-        end
-      else if (debug_ctr_inc)
-        begin
-          debug_ctr_new = debug_ctr_reg + 1'b1;
-          debug_ctr_we  = 1;
-        end
-      end // debug_ctr_logic
 
 
   //----------------------------------------------------------------
@@ -324,25 +262,6 @@ module avalanche_entropy(
           bit_ctr_we  = 1'b1;
         end
       end // entropy_ack_logic
-
-
-  //----------------------------------------------------------------
-  // led_update
-  //
-  // Sample the entropy register as LED output value at
-  // the given LED_RATE.
-  //----------------------------------------------------------------
-  always @*
-    begin : led_update
-      led_ctr_new = led_ctr_reg + 1'b1;
-      led_we      = 1'b0;
-
-      if (led_ctr_reg == LED_RATE)
-        begin
-          led_ctr_new = 32'h00000000;
-          led_we      = 1'b1;
-        end
-    end // led_update
 
 
   //----------------------------------------------------------------
