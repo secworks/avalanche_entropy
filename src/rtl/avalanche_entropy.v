@@ -144,7 +144,7 @@ module avalanche_entropy(
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
-  assign entropy_syn     = entropy_syn_reg;
+  assign entropy_valid   = entropy_syn_reg;
   assign entropy_data    = entropy_reg;
   assign entropy_enabled = enable_reg;
 
@@ -165,7 +165,7 @@ module avalanche_entropy(
           noise_sample_reg    <= 1'b0;
           flank0_reg          <= 1'b0;
           flank1_reg          <= 1'b0;
-          entropy_syn_reg   <= 1'b0;
+          entropy_syn_reg     <= 1'b0;
           entropy_reg         <= 32'h00000000;
           entropy_bit_reg     <= 1'b0;
           bit_ctr_reg         <= 6'h00;
@@ -186,7 +186,7 @@ module avalanche_entropy(
           flank0_reg        <= noise_sample_reg;
           flank1_reg        <= flank0_reg;
 
-          entropy_syn_reg <= entropy_syn_new;
+          entropy_syn_reg   <= entropy_syn_new;
 
           entropy_bit_reg   <= ~entropy_bit_reg;
 
