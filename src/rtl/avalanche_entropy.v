@@ -186,7 +186,7 @@ module avalanche_entropy(
             begin
               enable_reg <= enable_new;
             end
-          
+
           if (delta_we)
             begin
               delta_reg <= cycle_ctr_reg;
@@ -200,6 +200,16 @@ module avalanche_entropy(
           if (entropy_we)
             begin
               entropy_reg <= entropy_new;
+            end
+
+          if (debug_delay_ctr_we)
+            begin
+              debug_delay_ctr_reg <= debug_delay_ctr_new;
+            end
+
+          if (debug_we)
+            begin
+              debug_reg <= entropy_reg[7 : 0];
             end
         end
     end // reg_update
