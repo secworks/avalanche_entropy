@@ -93,10 +93,7 @@ module avalanche_entropy(
   //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
-  wire [31 : 0]  entropy_data;
-  wire           entropy_valid;
   wire [31 : 0]  delta;
-  wire [7 : 0]   debug;
 
   reg [31 : 0]   tmp_read_data;
   reg            tmp_error;
@@ -187,7 +184,7 @@ module avalanche_entropy(
               case (address)
                 ADDR_CTRL:
                   begin
-                    tmp_read_data = {31'h00000000, enable_data);
+                    tmp_read_data = {31'h00000000, enable_reg};
                   end
 
                 ADDR_STATUS:
@@ -197,12 +194,12 @@ module avalanche_entropy(
 
                 ADDR_ENTROPY:
                   begin
-                    tmp_read_data = entropy_reg;
+                    tmp_read_data = entropy_data;
                   end
 
                 ADDR_DELTA:
                   begin
-                    tmp_read_data = delta_reg;
+                    tmp_read_data = delta;
                   end
 
                 default:
