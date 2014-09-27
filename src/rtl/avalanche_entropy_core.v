@@ -1,10 +1,10 @@
 //======================================================================
 //
-// avalanche_entropy_core.v
-// ------------------------
-// Entropy provider core for an external entropy source based on
-// avalanche noise. (or any other source that ca toggle a single
-// bit input).
+// avalanche_entropy.v
+// -------------------
+// Top level wrapper of the entropy provider core based on an external
+// avalanche noise based source. (or any other source that can
+// toggle a single bit input).
 //
 // Currently the design consists of a free running counter. At every
 // positive flank detected the LSB of the counter is pushed into
@@ -42,35 +42,44 @@
 //
 //======================================================================
 
-module avalanche_entropy_core(
-                              input wire           clk,
-                              input wire           reset_n,
+module avalanche_entropy(
+                         input wire           clk,
+                         input wire           reset_n,
 
-                              input wire           noise,
-                              output wire          sampled_noise,
-                              output wire          entropy,
+                         input wire           noise,
 
-                              input wire           entropy_ack,
-                              output wire          entropy_syn,
-                              output wire [31 : 0] entropy_data,
+                         input wire           cs,
+                         input wire           we,
+                         input wire  [7 : 0]  address,
+                         input wire  [31 : 0] write_data,
+                         output wire [31 : 0] read_data,
+                         output wire          error,
 
-                              output wire [7 : 0]  led,
-                              output wire [7 : 0]  debug_data,
-                              output wire          debug_clk,
+                         input wire           discard,
+                         input wire           test_mode,
+                         output wire          security_error,
 
-                              output wire [31 : 0] delta_data,
-                              output wire          delta_clk
-                             );
+                         output wire          entropy_enabled,
+                         output wire [31 : 0] entropy_data,
+                         output wire          entropy_valid,
+                         input wire           entropy_ack,
+
+                         output wire [7 : 0]  debug,
+                         input wire           debug_update
+                        );
 
 
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
-  parameter ADDR_STATUS      = 8'h00;
-  parameter ADDR_ENTROPY     = 8'h10;
-  parameter ADDR_DELTA       = 8'h20;
+  parameter ADDR_CTRL       = 8'h10;
+  parameter CTRL_ENABLE_BIT = 0;
 
-  parameter DEBUG_DELAY  = 32'h002c4b40;
+  parameter ADDR_STATUS     = 8'h11;
+  parameter ADDR_ENTROPY    = 8'h20;
+  parameter ADDR_DELTA      = 8'h30;
+
+  parameter DEBUG_DELAY     = 32'h002c4b40;
 
 
   //----------------------------------------------------------------
@@ -102,8 +111,9 @@ module avalanche_entropy_core(
   reg [31 : 0] delta_reg;
   reg          delta_we;
 
-  reg          delta_clk_reg;
-  reg          delta_clk_new;
+  reg          enable_reg;
+  reg          enable_new;
+  reg          enable_we;
 
   reg [31 : 0] debug_delay_ctr_reg;
   reg [31 : 0] debug_delay_ctr_new;
@@ -118,21 +128,22 @@ module avalanche_entropy_core(
   //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
+  reg [31 : 0]   tmp_read_data;
+  reg            tmp_error;
 
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
-  assign entropy_syn = entropy_syn_reg;
-  assign entropy_data  = entropy_reg;
+  assign read_data       = tmp_read_data;
+  assign error           = tmp_error;
+  assign security_error  = 0;
 
-  assign sampled_noise = noise_sample_reg;
-  assign entropy       = entropy_reg[0];
+  assign entropy_valid   = entropy_syn_reg;
+  assign entropy_data    = entropy_reg;
+  assign entropy_enabled = enable_reg;
 
-  assign delta_data    = delta_reg;
-  assign delta_clk     = delta_clk_reg;
-
-  assign debug         = debug_reg;
+  assign debug           = debug_reg;
 
 
   //----------------------------------------------------------------
@@ -146,15 +157,13 @@ module avalanche_entropy_core(
           noise_sample_reg    <= 1'b0;
           flank0_reg          <= 1'b0;
           flank1_reg          <= 1'b0;
-          entropy_syn_reg   <= 1'b0;
+          entropy_syn_reg     <= 1'b0;
           entropy_reg         <= 32'h00000000;
           entropy_bit_reg     <= 1'b0;
           bit_ctr_reg         <= 6'h00;
-          debug_ctr_reg       <= 4'h0;
-          debug_clk_reg       <= 1'b0;
           cycle_ctr_reg       <= 32'h00000000;
           delta_reg           <= 32'h00000000;
-          delta_clk_reg       <= 1'b0;
+          enable_reg          <= 1;
           debug_delay_ctr_reg <= 32'h00000000;
           debug_reg           <= 8'h00;
           debug_update_reg    <= 0;
@@ -168,13 +177,15 @@ module avalanche_entropy_core(
           flank1_reg        <= flank0_reg;
 
           entropy_syn_reg   <= entropy_syn_new;
-
           entropy_bit_reg   <= ~entropy_bit_reg;
-
-          delta_clk_reg     <= delta_clk_new;
           cycle_ctr_reg     <= cycle_ctr_new;
 
-          debug_update_reg  <= debug_update;
+          debug_update_reg <= debug_update;
+
+          if (enable_we)
+            begin
+              enable_reg <= enable_new;
+            end
 
           if (delta_we)
             begin
@@ -184,11 +195,6 @@ module avalanche_entropy_core(
           if (bit_ctr_we)
             begin
               bit_ctr_reg <= bit_ctr_new;
-            end
-
-          if (debug_ctr_we)
-            begin
-              debug_ctr_reg <= debug_ctr_new;
             end
 
           if (entropy_we)
@@ -203,7 +209,7 @@ module avalanche_entropy_core(
 
           if (debug_we)
             begin
-              debug_reg <= ent_shift_reg[7 : 0];
+              debug_reg <= entropy_reg[7 : 0];
             end
         end
     end // reg_update
@@ -216,7 +222,7 @@ module avalanche_entropy_core(
   //----------------------------------------------------------------
   always @*
     begin : debug_out
-      debug_delay_ctr_new = 32'h00000000;
+      debug_delay_ctr_new = 8'h00000000;
       debug_delay_ctr_we  = 0;
       debug_we            = 0;
 
@@ -228,7 +234,7 @@ module avalanche_entropy_core(
 
       if (debug_delay_ctr_reg == DEBUG_DELAY)
         begin
-          debug_delay_ctr_new = 32'h00000000;
+          debug_delay_ctr_new = 8'h00000000;
           debug_delay_ctr_we  = 1;
           debug_we            = 1;
         end
@@ -247,14 +253,12 @@ module avalanche_entropy_core(
       entropy_new   = 32'h00000000;
       entropy_we    = 1'b0;
       bit_ctr_inc   = 1'b0;
-      debug_ctr_inc = 1'b0;
 
       if ((flank0_reg) && (!flank1_reg))
         begin
           entropy_new   = {entropy_reg[30 : 0], entropy_bit_reg};
           entropy_we    = 1'b1;
           bit_ctr_inc   = 1'b1;
-          debug_ctr_inc = 1'b1;
         end
     end // entropy_collect
 
@@ -267,42 +271,14 @@ module avalanche_entropy_core(
   always @*
     begin : delta_logic
       cycle_ctr_new      = cycle_ctr_reg + 1'b1;
-      delta_clk_new      = 1'b0;
       delta_we           = 1'b0;
 
       if ((flank0_reg) && (!flank1_reg))
         begin
           cycle_ctr_new = 32'h00000000;
-          delta_clk_new = 1'b1;
           delta_we      = 1'b1;
         end
     end // delta_logic
-
-
-  //----------------------------------------------------------------
-  // debug_ctr_logic
-  //
-  // The logic implements the counter needed to handle detection
-  // that enough bis has been generated to output debug values.
-  //----------------------------------------------------------------
-  always @*
-    begin : debug_ctr_logic
-      debug_ctr_new = 4'h0;
-      debug_ctr_we  = 0;
-      debug_clk_new = 0;
-
-      if (debug_ctr_reg == 4'h8)
-        begin
-          debug_ctr_new = 4'h0;
-          debug_ctr_we  = 1;
-          debug_clk_new = 1;
-        end
-      else if (debug_ctr_inc)
-        begin
-          debug_ctr_new = debug_ctr_reg + 1'b1;
-          debug_ctr_we  = 1;
-        end
-      end // debug_ctr_logic
 
 
   //----------------------------------------------------------------
@@ -335,8 +311,70 @@ module avalanche_entropy_core(
         end
       end // entropy_ack_logic
 
-endmodule // avalanche_entropy_core
+
+  //----------------------------------------------------------------
+  // api_logic
+  //----------------------------------------------------------------
+  always @*
+    begin : api_logic
+      tmp_read_data = 32'h00000000;
+      tmp_error     = 1'b0;
+      enable_new    = 0;
+      enable_we     = 0;
+
+      if (cs)
+        begin
+          if (we)
+            begin
+              case (address)
+                // Write operations.
+                ADDR_CTRL:
+                  begin
+                    enable_new = write_data[CTRL_ENABLE_BIT];
+                    enable_we  = 1;
+                  end
+
+                default:
+                  begin
+                    tmp_error = 1;
+                  end
+              endcase // case (address)
+            end // if (we)
+
+          else
+            begin
+              case (address)
+                ADDR_CTRL:
+                  begin
+                    tmp_read_data = {31'h00000000, enable_reg};
+                  end
+
+                ADDR_STATUS:
+                  begin
+                    tmp_read_data = {31'h00000000, entropy_syn_reg};
+                   end
+
+                ADDR_ENTROPY:
+                  begin
+                    tmp_read_data = entropy_reg;
+                  end
+
+                ADDR_DELTA:
+                  begin
+                    tmp_read_data = delta_reg;
+                  end
+
+                default:
+                  begin
+                    tmp_error = 1;
+                  end
+              endcase // case (address)
+            end // else: !if(we)
+        end // if (cs)
+    end // api_logic
+
+endmodule // avalanche_entropy
 
 //======================================================================
-// EOF avalanche_entropy_core.v
+// EOF avalanche_entropy.v
 //======================================================================
