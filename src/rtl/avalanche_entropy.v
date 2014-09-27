@@ -72,62 +72,32 @@ module avalanche_entropy(
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
-  parameter ADDR_CTRL       = 8'h10;
-  parameter CTRL_ENABLE_BIT = 0;
+  parameter ADDR_CTRL               = 8'h10;
+  parameter CTRL_ENABLE_BIT         = 0;
 
-  parameter ADDR_STATUS     = 8'h11;
-  parameter ADDR_ENTROPY    = 8'h20;
-  parameter ADDR_DELTA      = 8'h30;
+  parameter ADDR_STATUS             = 8'h11;
+  parameter STATUS_ENABLE_VALID_BIT = 0;
 
-  parameter DEBUG_DELAY     = 32'h002c4b40;
+  parameter ADDR_ENTROPY            = 8'h20;
+  parameter ADDR_DELTA              = 8'h30;
 
 
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
   //----------------------------------------------------------------
-  reg          noise_sample0_reg;
-  reg          noise_sample_reg;
-
-  reg          flank0_reg;
-  reg          flank1_reg;
-
-  reg          entropy_bit_reg;
-
-  reg [31 : 0] entropy_reg;
-  reg [31 : 0] entropy_new;
-  reg          entropy_we;
-
-  reg          entropy_syn_reg;
-  reg          entropy_syn_new;
-
-  reg [5 :  0] bit_ctr_reg;
-  reg [5 :  0] bit_ctr_new;
-  reg          bit_ctr_inc;
-  reg          bit_ctr_we;
-
-  reg [31 : 0] cycle_ctr_reg;
-  reg [31 : 0] cycle_ctr_new;
-
-  reg [31 : 0] delta_reg;
-  reg          delta_we;
-
   reg          enable_reg;
   reg          enable_new;
   reg          enable_we;
-
-  reg [31 : 0] debug_delay_ctr_reg;
-  reg [31 : 0] debug_delay_ctr_new;
-  reg          debug_delay_ctr_we;
-
-  reg [7 : 0]  debug_reg;
-  reg          debug_we;
-
-  reg          debug_update_reg;
 
 
   //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
+  wire [31 : 0]  entropy_data;
+  wire           entropy_valid;
+  wire [31 : 0]  delta;
+  wire [7 : 0]   debug;
+
   reg [31 : 0]   tmp_read_data;
   reg            tmp_error;
 
@@ -139,11 +109,29 @@ module avalanche_entropy(
   assign error           = tmp_error;
   assign security_error  = 0;
 
-  assign entropy_valid   = entropy_syn_reg;
-  assign entropy_data    = entropy_reg;
   assign entropy_enabled = enable_reg;
 
-  assign debug           = debug_reg;
+
+  //----------------------------------------------------------------
+  // Core instantiation.
+  //----------------------------------------------------------------
+  avalanche_entropy_core core(
+                              .clk(clk),
+                              .reset_n(reset_n),
+
+                              .noise(noise),
+
+                              .enable(enable_reg),
+
+                              .entropy_data(entropy_data),
+                              .entropy_valid(entropy_valid),
+                              .entropy_ack(entropy_ack),
+
+                              .delta(delta),
+
+                              .debug(debug),
+                              .debug_update(debug_update)
+                             );
 
 
   //----------------------------------------------------------------
@@ -153,163 +141,16 @@ module avalanche_entropy(
     begin
       if (!reset_n)
         begin
-          noise_sample0_reg   <= 1'b0;
-          noise_sample_reg    <= 1'b0;
-          flank0_reg          <= 1'b0;
-          flank1_reg          <= 1'b0;
-          entropy_syn_reg     <= 1'b0;
-          entropy_reg         <= 32'h00000000;
-          entropy_bit_reg     <= 1'b0;
-          bit_ctr_reg         <= 6'h00;
-          cycle_ctr_reg       <= 32'h00000000;
-          delta_reg           <= 32'h00000000;
-          enable_reg          <= 1;
-          debug_delay_ctr_reg <= 32'h00000000;
-          debug_reg           <= 8'h00;
-          debug_update_reg    <= 0;
+          enable_reg <= 1;
         end
       else
         begin
-          noise_sample0_reg <= noise;
-          noise_sample_reg  <= noise_sample0_reg;
-
-          flank0_reg        <= noise_sample_reg;
-          flank1_reg        <= flank0_reg;
-
-          entropy_syn_reg   <= entropy_syn_new;
-          entropy_bit_reg   <= ~entropy_bit_reg;
-          cycle_ctr_reg     <= cycle_ctr_new;
-
-          debug_update_reg <= debug_update;
-
           if (enable_we)
             begin
               enable_reg <= enable_new;
             end
-
-          if (delta_we)
-            begin
-              delta_reg <= cycle_ctr_reg;
-            end
-
-          if (bit_ctr_we)
-            begin
-              bit_ctr_reg <= bit_ctr_new;
-            end
-
-          if (entropy_we)
-            begin
-              entropy_reg <= entropy_new;
-            end
-
-          if (debug_delay_ctr_we)
-            begin
-              debug_delay_ctr_reg <= debug_delay_ctr_new;
-            end
-
-          if (debug_we)
-            begin
-              debug_reg <= entropy_reg[7 : 0];
-            end
         end
     end // reg_update
-
-
-  //----------------------------------------------------------------
-  // debug_out
-  //
-  // Logic that updates the debug port.
-  //----------------------------------------------------------------
-  always @*
-    begin : debug_out
-      debug_delay_ctr_new = 8'h00000000;
-      debug_delay_ctr_we  = 0;
-      debug_we            = 0;
-
-      if (debug_update_reg)
-        begin
-          debug_delay_ctr_new = debug_delay_ctr_reg + 1'b1;
-          debug_delay_ctr_we  = 1;
-        end
-
-      if (debug_delay_ctr_reg == DEBUG_DELAY)
-        begin
-          debug_delay_ctr_new = 8'h00000000;
-          debug_delay_ctr_we  = 1;
-          debug_we            = 1;
-        end
-    end
-
-
-  //----------------------------------------------------------------
-  // entropy_collect
-  //
-  // We collect entropy by adding the current state of the
-  // entropy bit register the entropy shift register every time
-  // we detect a positive flank in the noise source.
-  //----------------------------------------------------------------
-  always @*
-    begin : entropy_collect
-      entropy_new   = 32'h00000000;
-      entropy_we    = 1'b0;
-      bit_ctr_inc   = 1'b0;
-
-      if ((flank0_reg) && (!flank1_reg))
-        begin
-          entropy_new   = {entropy_reg[30 : 0], entropy_bit_reg};
-          entropy_we    = 1'b1;
-          bit_ctr_inc   = 1'b1;
-        end
-    end // entropy_collect
-
-
-  //----------------------------------------------------------------
-  // delta_logic
-  //
-  // The logic implements the delta time measuerment system.
-  //----------------------------------------------------------------
-  always @*
-    begin : delta_logic
-      cycle_ctr_new      = cycle_ctr_reg + 1'b1;
-      delta_we           = 1'b0;
-
-      if ((flank0_reg) && (!flank1_reg))
-        begin
-          cycle_ctr_new = 32'h00000000;
-          delta_we      = 1'b1;
-        end
-    end // delta_logic
-
-
-  //----------------------------------------------------------------
-  // entropy_ack_logic
-  //
-  // The logic needed to handle detection that entropy has been
-  // read and ensure that we collect more than 32 entropy
-  // bits beforeproviding more entropy.
-  //----------------------------------------------------------------
-  always @*
-    begin : entropy_ack_logic
-      bit_ctr_new       = 6'h00;
-      bit_ctr_we        = 1'b0;
-      entropy_syn_new = 1'b0;
-
-      if (bit_ctr_reg == 6'h20)
-        begin
-          entropy_syn_new = 1'b1;
-        end
-
-      if ((bit_ctr_inc) && (bit_ctr_reg < 6'h20))
-        begin
-          bit_ctr_new = bit_ctr_reg + 1'b1;
-          bit_ctr_we  = 1'b1;
-        end
-      else if (entropy_ack)
-        begin
-          bit_ctr_new = 6'h00;
-          bit_ctr_we  = 1'b1;
-        end
-      end // entropy_ack_logic
 
 
   //----------------------------------------------------------------
@@ -346,12 +187,12 @@ module avalanche_entropy(
               case (address)
                 ADDR_CTRL:
                   begin
-                    tmp_read_data = {31'h00000000, enable_reg};
+                    tmp_read_data = {31'h00000000, enable_data);
                   end
 
                 ADDR_STATUS:
                   begin
-                    tmp_read_data = {31'h00000000, entropy_syn_reg};
+                    tmp_read_data = {31'h00000000, entropy_valid};
                    end
 
                 ADDR_ENTROPY:

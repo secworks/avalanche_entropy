@@ -1,14 +1,21 @@
 //======================================================================
 //
-// avalanche_entropy.v
-// -------------------
-// Top level wrapper of the entropy provider core based on an external
-// avalanche noise based source. (or any other source that can
-// toggle a single bit input).
+// avalanche_entropy_core.v
+// ------------------------
+// Core functionality for the entropy provider core based on
+// an external avalanche noise based source. (or any other source that
+// can toggle a single bit input).
 //
-// Currently the design consists of a free running counter. At every
-// positive flank detected the LSB of the counter is pushed into
-// a 32bit shift register.
+// Currently the design consists of a counter running at clock speeed.
+// When a positive flank event is detected in the noise source the
+// current LSB value of the counter is pushed into a 32bit
+// entropy collection shift register.
+//
+// The core provides functionality to measure the time betwee
+// positive flank events counted as number of clock cycles. There
+// is also access ports for the collected entropy.
+//
+// No post-processing is currently performed done on the entropy.
 //
 //
 // Author: Joachim Strombergson
@@ -42,44 +49,31 @@
 //
 //======================================================================
 
-module avalanche_entropy(
-                         input wire           clk,
-                         input wire           reset_n,
+module avalanche_entropy_core(
+                              input wire           clk,
+                              input wire           reset_n,
 
-                         input wire           noise,
+                              input wire           noise,
 
-                         input wire           cs,
-                         input wire           we,
-                         input wire  [7 : 0]  address,
-                         input wire  [31 : 0] write_data,
-                         output wire [31 : 0] read_data,
-                         output wire          error,
+                              input wire           enable,
 
-                         input wire           discard,
-                         input wire           test_mode,
-                         output wire          security_error,
+                              output wire          entropy_enabled,
+                              output wire [31 : 0] entropy_data,
+                              output wire          entropy_valid,
+                              input wire           entropy_ack,
 
-                         output wire          entropy_enabled,
-                         output wire [31 : 0] entropy_data,
-                         output wire          entropy_valid,
-                         input wire           entropy_ack,
+                              output wire [31 : 0] delta,
 
-                         output wire [7 : 0]  debug,
-                         input wire           debug_update
-                        );
+                              output wire [7 : 0]  debug,
+                              input wire           debug_update
+                             );
 
 
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
-  parameter ADDR_CTRL       = 8'h10;
-  parameter CTRL_ENABLE_BIT = 0;
-
-  parameter ADDR_STATUS     = 8'h11;
-  parameter ADDR_ENTROPY    = 8'h20;
-  parameter ADDR_DELTA      = 8'h30;
-
-  parameter DEBUG_DELAY     = 32'h002c4b40;
+  parameter DEBUG_DELAY      = 32'h002c4b40;
+  parameter MIN_ENTROPY_BITS = 6'h20;
 
 
   //----------------------------------------------------------------
@@ -97,8 +91,8 @@ module avalanche_entropy(
   reg [31 : 0] entropy_new;
   reg          entropy_we;
 
-  reg          entropy_syn_reg;
-  reg          entropy_syn_new;
+  reg          entropy_valid_reg;
+  reg          entropy_valid_new;
 
   reg [5 :  0] bit_ctr_reg;
   reg [5 :  0] bit_ctr_new;
@@ -128,21 +122,16 @@ module avalanche_entropy(
   //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
-  reg [31 : 0]   tmp_read_data;
-  reg            tmp_error;
 
 
   //----------------------------------------------------------------
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
-  assign read_data       = tmp_read_data;
-  assign error           = tmp_error;
-  assign security_error  = 0;
-
-  assign entropy_valid   = entropy_syn_reg;
+  assign entropy_valid   = entropy_valid_reg;
   assign entropy_data    = entropy_reg;
   assign entropy_enabled = enable_reg;
 
+  assign delta           = delta_reg;
   assign debug           = debug_reg;
 
 
@@ -157,7 +146,7 @@ module avalanche_entropy(
           noise_sample_reg    <= 1'b0;
           flank0_reg          <= 1'b0;
           flank1_reg          <= 1'b0;
-          entropy_syn_reg     <= 1'b0;
+          entropy_valid_reg     <= 1'b0;
           entropy_reg         <= 32'h00000000;
           entropy_bit_reg     <= 1'b0;
           bit_ctr_reg         <= 6'h00;
@@ -176,7 +165,7 @@ module avalanche_entropy(
           flank0_reg        <= noise_sample_reg;
           flank1_reg        <= flank0_reg;
 
-          entropy_syn_reg   <= entropy_syn_new;
+          entropy_valid_reg   <= entropy_valid_new;
           entropy_bit_reg   <= ~entropy_bit_reg;
           cycle_ctr_reg     <= cycle_ctr_new;
 
@@ -292,11 +281,11 @@ module avalanche_entropy(
     begin : entropy_ack_logic
       bit_ctr_new       = 6'h00;
       bit_ctr_we        = 1'b0;
-      entropy_syn_new = 1'b0;
+      entropy_valid_new = 1'b0;
 
-      if (bit_ctr_reg == 6'h20)
+      if (bit_ctr_reg == MIN_ENTROPY_BITS)
         begin
-          entropy_syn_new = 1'b1;
+          entropy_valid_new = 1'b1;
         end
 
       if ((bit_ctr_inc) && (bit_ctr_reg < 6'h20))
@@ -311,70 +300,8 @@ module avalanche_entropy(
         end
       end // entropy_ack_logic
 
-
-  //----------------------------------------------------------------
-  // api_logic
-  //----------------------------------------------------------------
-  always @*
-    begin : api_logic
-      tmp_read_data = 32'h00000000;
-      tmp_error     = 1'b0;
-      enable_new    = 0;
-      enable_we     = 0;
-
-      if (cs)
-        begin
-          if (we)
-            begin
-              case (address)
-                // Write operations.
-                ADDR_CTRL:
-                  begin
-                    enable_new = write_data[CTRL_ENABLE_BIT];
-                    enable_we  = 1;
-                  end
-
-                default:
-                  begin
-                    tmp_error = 1;
-                  end
-              endcase // case (address)
-            end // if (we)
-
-          else
-            begin
-              case (address)
-                ADDR_CTRL:
-                  begin
-                    tmp_read_data = {31'h00000000, enable_reg};
-                  end
-
-                ADDR_STATUS:
-                  begin
-                    tmp_read_data = {31'h00000000, entropy_syn_reg};
-                   end
-
-                ADDR_ENTROPY:
-                  begin
-                    tmp_read_data = entropy_reg;
-                  end
-
-                ADDR_DELTA:
-                  begin
-                    tmp_read_data = delta_reg;
-                  end
-
-                default:
-                  begin
-                    tmp_error = 1;
-                  end
-              endcase // case (address)
-            end // else: !if(we)
-        end // if (cs)
-    end // api_logic
-
-endmodule // avalanche_entropy
+endmodule // avalanche_entropy_core
 
 //======================================================================
-// EOF avalanche_entropy.v
+// EOF avalanche_entropy_core.v
 //======================================================================
