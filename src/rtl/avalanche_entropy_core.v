@@ -99,15 +99,13 @@ module avalanche_entropy_core(
   reg          bit_ctr_inc;
   reg          bit_ctr_we;
 
+  reg          enable_reg;
+
   reg [31 : 0] cycle_ctr_reg;
   reg [31 : 0] cycle_ctr_new;
 
   reg [31 : 0] delta_reg;
   reg          delta_we;
-
-  reg          enable_reg;
-  reg          enable_new;
-  reg          enable_we;
 
   reg [31 : 0] debug_delay_ctr_reg;
   reg [31 : 0] debug_delay_ctr_new;
@@ -129,10 +127,10 @@ module avalanche_entropy_core(
   //----------------------------------------------------------------
   assign entropy_valid   = entropy_valid_reg;
   assign entropy_data    = entropy_reg;
-  assign entropy_enabled = enable_reg;
 
   assign delta           = delta_reg;
   assign debug           = debug_reg;
+  assign entropy_enabled = enable_reg;
 
 
   //----------------------------------------------------------------
@@ -152,10 +150,10 @@ module avalanche_entropy_core(
           bit_ctr_reg         <= 6'h00;
           cycle_ctr_reg       <= 32'h00000000;
           delta_reg           <= 32'h00000000;
-          enable_reg          <= 1;
           debug_delay_ctr_reg <= 32'h00000000;
           debug_reg           <= 8'h00;
           debug_update_reg    <= 0;
+          enable_reg          <= 0;
         end
       else
         begin
@@ -165,16 +163,13 @@ module avalanche_entropy_core(
           flank0_reg        <= noise_sample_reg;
           flank1_reg        <= flank0_reg;
 
-          entropy_valid_reg   <= entropy_valid_new;
+          entropy_valid_reg <= entropy_valid_new;
           entropy_bit_reg   <= ~entropy_bit_reg;
           cycle_ctr_reg     <= cycle_ctr_new;
 
-          debug_update_reg <= debug_update;
+          debug_update_reg  <= debug_update;
 
-          if (enable_we)
-            begin
-              enable_reg <= enable_new;
-            end
+          enable_reg        <= enable;
 
           if (delta_we)
             begin
