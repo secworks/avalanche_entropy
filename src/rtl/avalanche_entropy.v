@@ -72,6 +72,10 @@ module avalanche_entropy(
   //----------------------------------------------------------------
   // Internal constant and parameter definitions.
   //----------------------------------------------------------------
+  parameter ADDR_NAME0              = 8'h00;
+  parameter ADDR_NAME1              = 8'h01;
+  parameter ADDR_VERSION            = 8'h02;
+
   parameter ADDR_CTRL               = 8'h10;
   parameter CTRL_ENABLE_BIT         = 0;
 
@@ -80,6 +84,11 @@ module avalanche_entropy(
 
   parameter ADDR_ENTROPY            = 8'h20;
   parameter ADDR_DELTA              = 8'h30;
+
+
+  parameter CORE_NAME0              = 32'h6578746e; // "extn"
+  parameter CORE_NAME1              = 32'h6f697365; // "oise"
+  parameter CORE_VERSION            = 32'h302e3130; // "0.10"
 
 
   //----------------------------------------------------------------
@@ -182,6 +191,21 @@ module avalanche_entropy(
           else
             begin
               case (address)
+                ADDR_NAME0:
+                  begin
+                    tmp_read_data = CORE_NAME0;
+                  end
+
+                ADDR_NAME1:
+                  begin
+                    tmp_read_data = CORE_NAME1;
+                  end
+
+                ADDR_VERSION:
+                  begin
+                    tmp_read_data = CORE_VERSION;
+                  end
+
                 ADDR_CTRL:
                   begin
                     tmp_read_data = {31'h00000000, enable_reg};
