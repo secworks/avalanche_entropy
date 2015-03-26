@@ -35,5 +35,6 @@ Cyclone-IV and Cyclone-V devices as well as in Xilinx Spartan-6
 devices. The core clock frequency used has been 25 MHz, 33 MHz and 50
 MHz.
 
-The generated entropy has been extensively tested and found to be
-generating entropy with good quality.
+The generated entropy has been extensively tested (using the ent tool as
+well as other custom tools) and found to be generating entropy with good
+quality.
