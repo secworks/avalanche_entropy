@@ -1,9 +1,9 @@
-external_avalanche_entropy
-==========================
+avalanche_entropy
+=================
 
 Entropy provider core for an external avalanche noise based entropy source.
 
-## Functional Descriptopn ##
+## Functional Description ##
 
 This core samples noise provided on an input pin. The noise is expected
 to be 'digital' that is fairly rapidly move from voltage levels
